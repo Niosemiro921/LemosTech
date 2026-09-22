@@ -1,0 +1,57 @@
+{
+  "environment": {
+    "baseUrl": "http://localhost:3000/api/v1",
+    "customerToken": "<CUSTOMER_JWT>",
+    "supplierToken": "<SUPPLIER_JWT>",
+    "driverToken": "<DRIVER_JWT>",
+    "orderId": "<ORDER_UUID>",
+    "offerId": "<DRIVER_OFFER_UUID>"
+  },
+  "requests": [
+    {
+      "name": "Driver - ficar online",
+      "method": "POST",
+      "url": "{{baseUrl}}/drivers/me/online",
+      "headers": { "Authorization": "Bearer {{driverToken}}", "Content-Type": "application/json" },
+      "body": { "latitude": -8.839, "longitude": 13.289 }
+    },
+    {
+      "name": "Supplier - iniciar dispatch",
+      "method": "POST",
+      "url": "{{baseUrl}}/dispatch/orders/{{orderId}}/start",
+      "headers": { "Authorization": "Bearer {{supplierToken}}", "Content-Type": "application/json" },
+      "body": { "maxOffers": 3 }
+    },
+    {
+      "name": "Driver - listar ofertas",
+      "method": "GET",
+      "url": "{{baseUrl}}/drivers/me/offers",
+      "headers": { "Authorization": "Bearer {{driverToken}}" }
+    },
+    {
+      "name": "Driver - aceitar oferta",
+      "method": "POST",
+      "url": "{{baseUrl}}/drivers/me/offers/{{offerId}}/accept",
+      "headers": { "Authorization": "Bearer {{driverToken}}" }
+    },
+    {
+      "name": "Driver - recusar oferta",
+      "method": "POST",
+      "url": "{{baseUrl}}/drivers/me/offers/{{offerId}}/reject",
+      "headers": { "Authorization": "Bearer {{driverToken}}" }
+    },
+    {
+      "name": "Driver - atualizar localização",
+      "method": "POST",
+      "url": "{{baseUrl}}/drivers/me/location",
+      "headers": { "Authorization": "Bearer {{driverToken}}", "Content-Type": "application/json" },
+      "body": { "latitude": -8.841, "longitude": 13.291 }
+    },
+    {
+      "name": "Customer - tracking",
+      "method": "GET",
+      "url": "{{baseUrl}}/orders/mine/{{orderId}}/tracking",
+      "headers": { "Authorization": "Bearer {{customerToken}}" }
+    }
+  ]
+}

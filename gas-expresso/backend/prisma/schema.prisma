@@ -1,0 +1,361 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  SUPPLIER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  PENDING_REVIEW
+  DOCUMENTS_REQUIRED
+  REJECTED
+  SUSPENDED
+}
+
+model User {
+  id             String           @id @default(uuid()) @db.Uuid
+  phone          String           @unique
+  email          String?          @unique
+  passwordHash   String
+  role           UserRole
+  status         AccountStatus    @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  reviewedAt     DateTime?
+  reviewNote     String?
+
+  customer       CustomerProfile?
+  driver         DriverProfile?
+  supplier       SupplierProfile?
+  customerOrders Order[]          @relation("CustomerOrders")
+
+  @@index([role, status])
+}
+
+model CustomerProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  fullName  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DriverProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @unique @db.Uuid
+  fullName       String
+  documentNumber String
+  vehicleType       String
+  vehicleCapacityKg Int      @default(45)
+  latitude          Float?
+  longitude         Float?
+  lastLocationAt    DateTime?
+  isOnline          Boolean  @default(false)
+  ratingAverage     Float    @default(5)
+  acceptanceRate    Float    @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offers     DriverOffer[]
+  deliveries Delivery[]
+
+  @@index([documentNumber])
+  @@index([isOnline, latitude, longitude])
+}
+
+model SupplierProfile {
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String          @unique @db.Uuid
+  legalName       String
+  tradeName       String
+  nif             String
+  responsibleName String
+  latitude        Float?
+  longitude       Float?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventory  InventoryItem[]
+  orders     Order[]
+
+  @@index([nif])
+  @@index([latitude, longitude])
+}
+
+enum AdminReviewAction {
+  APPROVED
+  REJECTED
+  DOCUMENTS_REQUESTED
+}
+
+model AuditLog {
+  id           String            @id @default(uuid()) @db.Uuid
+  actorUserId  String            @db.Uuid
+  targetUserId String            @db.Uuid
+  action       AdminReviewAction
+  reason       String?
+  createdAt    DateTime          @default(now())
+
+  @@index([targetUserId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model Product {
+  id          String           @id @default(uuid()) @db.Uuid
+  slug        String           @unique
+  name        String
+  description String?
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  variants    ProductVariant[]
+}
+
+model ProductVariant {
+  id          String          @id @default(uuid()) @db.Uuid
+  productId   String          @db.Uuid
+  sku         String          @unique
+  name        String
+  weightKg    Int
+  unitPrice   Int
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory    InventoryItem[]
+  orderItems   OrderItem[]
+
+  @@index([productId, active])
+  @@index([weightKg, active])
+}
+
+enum InventoryMovementType {
+  STOCK_IN
+  RESERVE
+  RELEASE
+  OUTBOUND
+  ADJUSTMENT
+}
+
+model InventoryItem {
+  id           String          @id @default(uuid()) @db.Uuid
+  supplierId   String          @db.Uuid
+  variantId    String          @db.Uuid
+  availableQty Int             @default(0)
+  reservedQty  Int             @default(0)
+  reorderLevel Int             @default(5)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  supplier  SupplierProfile      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  variant   ProductVariant       @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  movements InventoryMovement[]
+
+  @@unique([supplierId, variantId])
+  @@index([variantId, availableQty])
+}
+
+model InventoryMovement {
+  id          String                 @id @default(uuid()) @db.Uuid
+  inventoryId String                 @db.Uuid
+  orderId     String?                @db.Uuid
+  type        InventoryMovementType
+  quantity    Int
+  note        String?
+  createdAt   DateTime               @default(now())
+
+  inventory InventoryItem @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  order     Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryId, createdAt])
+  @@index([orderId, createdAt])
+}
+
+enum DeliveryType {
+  EXPRESS
+  SCHEDULED
+}
+
+enum PaymentMethod {
+  PAY_ON_DELIVERY
+}
+
+enum OrderStatus {
+  CREATED
+  AWAITING_SUPPLIER_ACCEPTANCE
+  SUPPLIER_ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  DRIVER_SEARCHING
+  DRIVER_ASSIGNED
+  DRIVER_ACCEPTED
+  PICKED_UP
+  IN_TRANSIT
+  ARRIVED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+model Order {
+  id                    String       @id @default(uuid()) @db.Uuid
+  reference             String       @unique
+  idempotencyKey        String?      @unique
+  customerId            String       @db.Uuid
+  supplierId            String?      @db.Uuid
+  status                OrderStatus  @default(CREATED)
+  deliveryType          DeliveryType
+  paymentMethod         PaymentMethod @default(PAY_ON_DELIVERY)
+  scheduledAt           DateTime?
+  deliveryAddress       String
+  latitude              Float
+  longitude             Float
+  subtotal              Int
+  deliveryFee           Int
+  platformFee           Int
+  discount              Int          @default(0)
+  total                 Int
+  currency              String       @default("AOA")
+  distanceKm            Float?
+  estimatedMinutes      Int?
+  pricingVersion        String       @default("v1")
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  customer              User                  @relation("CustomerOrders", fields: [customerId], references: [id])
+  supplier              SupplierProfile?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items                 OrderItem[]
+  statusHistory         OrderStatusHistory[]
+  inventoryMovements    InventoryMovement[]
+  delivery              Delivery?
+  driverOffers          DriverOffer[]
+
+  @@index([customerId, createdAt])
+  @@index([supplierId, status, createdAt])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id            String         @id @default(uuid()) @db.Uuid
+  orderId       String         @db.Uuid
+  variantId     String         @db.Uuid
+  variantName   String
+  weightKg      Int
+  quantity      Int
+  unitPrice     Int
+  lineTotal     Int
+
+  order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([orderId])
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid()) @db.Uuid
+  orderId   String      @db.Uuid
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+
+enum DriverOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum DeliveryStatus {
+  ASSIGNED
+  TO_PICKUP
+  AT_PICKUP
+  PICKED_UP
+  IN_TRANSIT
+  ARRIVED
+  DELIVERED
+  CANCELLED
+}
+
+model DriverOffer {
+  id                     String            @id @default(uuid()) @db.Uuid
+  orderId                String            @db.Uuid
+  driverId               String            @db.Uuid
+  status                 DriverOfferStatus @default(PENDING)
+  distanceToPickupKm     Float
+  estimatedPickupMinutes Int
+  expiresAt              DateTime
+  respondedAt            DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  order  Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, driverId])
+  @@index([driverId, status, createdAt])
+  @@index([orderId, status, createdAt])
+}
+
+model Delivery {
+  id               String         @id @default(uuid()) @db.Uuid
+  orderId          String         @unique @db.Uuid
+  driverId         String         @db.Uuid
+  status           DeliveryStatus @default(ASSIGNED)
+  pickupAddress    String
+  pickupLatitude   Float
+  pickupLongitude  Float
+  dropoffAddress   String
+  dropoffLatitude  Float
+  dropoffLongitude Float
+  assignedAt       DateTime       @default(now())
+  acceptedAt       DateTime?
+  pickedUpAt       DateTime?
+  arrivedAt        DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  order  Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver DriverProfile @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  statusHistory DeliveryStatusHistory[]
+
+  @@index([driverId, status, createdAt])
+  @@index([status, createdAt])
+}
+
+
+model DeliveryStatusHistory {
+  id         String         @id @default(uuid()) @db.Uuid
+  deliveryId String         @db.Uuid
+  status     DeliveryStatus
+  note       String?
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime       @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, createdAt])
+}

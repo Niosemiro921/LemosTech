@@ -1,0 +1,157 @@
+{
+  "baseUrl": "http://localhost:3000/api/v1",
+  "note": "Substitua os placeholders pelos tokens/IDs reais. O pagamento é PAY_ON_DELIVERY nesta V1.",
+  "products": {
+    "list": {
+      "method": "GET",
+      "url": "/products"
+    },
+    "create": {
+      "method": "POST",
+      "url": "/products",
+      "headers": {
+        "Authorization": "Bearer <ADMIN_TOKEN>",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "slug": "gas-engarrafado",
+        "name": "Gás Engarrafado",
+        "description": "Catálogo",
+        "variants": [
+          {
+            "sku": "GE-6KG",
+            "name": "Botija 6 KG",
+            "weightKg": 6,
+            "unitPrice": 3500
+          },
+          {
+            "sku": "GE-12KG",
+            "name": "Botija 12 KG",
+            "weightKg": 12,
+            "unitPrice": 7000
+          },
+          {
+            "sku": "GE-45KG",
+            "name": "Botija 45 KG",
+            "weightKg": 45,
+            "unitPrice": 18000
+          }
+        ]
+      }
+    }
+  },
+  "supplier": {
+    "location": {
+      "method": "PATCH",
+      "url": "/suppliers/me/location",
+      "headers": {
+        "Authorization": "Bearer <SUPPLIER_TOKEN>",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "latitude": -8.914,
+        "longitude": 13.19
+      }
+    },
+    "inventory": {
+      "method": "PATCH",
+      "url": "/suppliers/me/inventory",
+      "headers": {
+        "Authorization": "Bearer <SUPPLIER_TOKEN>",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "variantId": "<VARIANT_ID>",
+        "availableQty": 20,
+        "reorderLevel": 5,
+        "note": "Entrada inicial"
+      }
+    },
+    "orders": {
+      "method": "GET",
+      "url": "/suppliers/me/orders",
+      "headers": {
+        "Authorization": "Bearer <SUPPLIER_TOKEN>"
+      }
+    },
+    "accept": {
+      "method": "POST",
+      "url": "/suppliers/me/orders/<ORDER_ID>/accept",
+      "headers": {
+        "Authorization": "Bearer <SUPPLIER_TOKEN>"
+      }
+    },
+    "prepare": {
+      "method": "POST",
+      "url": "/suppliers/me/orders/<ORDER_ID>/prepare",
+      "headers": {
+        "Authorization": "Bearer <SUPPLIER_TOKEN>"
+      }
+    },
+    "ready": {
+      "method": "POST",
+      "url": "/suppliers/me/orders/<ORDER_ID>/ready",
+      "headers": {
+        "Authorization": "Bearer <SUPPLIER_TOKEN>"
+      }
+    }
+  },
+  "orders": {
+    "quote": {
+      "method": "POST",
+      "url": "/orders/quote",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "items": [
+          {
+            "variantId": "<VARIANT_ID>",
+            "quantity": 1
+          }
+        ],
+        "deliveryType": "EXPRESS",
+        "deliveryAddress": "Talatona, Luanda",
+        "latitude": -8.918,
+        "longitude": 13.198
+      }
+    },
+    "create": {
+      "method": "POST",
+      "url": "/orders",
+      "headers": {
+        "Authorization": "Bearer <CUSTOMER_TOKEN>",
+        "Content-Type": "application/json",
+        "Idempotency-Key": "order-client-unique-key-001"
+      },
+      "body": {
+        "items": [
+          {
+            "variantId": "<VARIANT_ID>",
+            "quantity": 1
+          }
+        ],
+        "deliveryType": "EXPRESS",
+        "deliveryAddress": "Talatona, Luanda",
+        "latitude": -8.918,
+        "longitude": 13.198,
+        "acceptEstimatedPrice": true
+      }
+    },
+    "mine": {
+      "method": "GET",
+      "url": "/orders/mine",
+      "headers": {
+        "Authorization": "Bearer <CUSTOMER_TOKEN>"
+      }
+    },
+    "detail": {
+      "method": "GET",
+      "url": "/orders/mine/<ORDER_ID>",
+      "headers": {
+        "Authorization": "Bearer <CUSTOMER_TOKEN>"
+      }
+    }
+  },
+  "idempotency": "Reutilize a mesma Idempotency-Key quando repetir a mesma criação; o backend devolve o mesmo pedido para a mesma conta."
+}

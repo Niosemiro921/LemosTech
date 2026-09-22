@@ -1,0 +1,50 @@
+{
+  "baseUrl": "http://localhost:3000/api/v1",
+  "headers": {
+    "Authorization": "Bearer {{driverToken}}",
+    "Content-Type": "application/json"
+  },
+  "requests": [
+    {
+      "name": "Entrega atual",
+      "method": "GET",
+      "url": "/drivers/me/deliveries/current"
+    },
+    {
+      "name": "Ir buscar pedido",
+      "method": "POST",
+      "url": "/drivers/me/deliveries/{{deliveryId}}/to-pickup",
+      "body": { "note": "A caminho do fornecedor." }
+    },
+    {
+      "name": "Cheguei ao fornecedor",
+      "method": "POST",
+      "url": "/drivers/me/deliveries/{{deliveryId}}/at-pickup",
+      "body": { "note": "Cheguei para recolher a botija." }
+    },
+    {
+      "name": "Confirmar recolha",
+      "method": "POST",
+      "url": "/drivers/me/deliveries/{{deliveryId}}/picked-up",
+      "body": { "note": "Botija recolhida." }
+    },
+    {
+      "name": "Iniciar entrega",
+      "method": "POST",
+      "url": "/drivers/me/deliveries/{{deliveryId}}/in-transit",
+      "body": { "note": "A caminho do cliente." }
+    },
+    {
+      "name": "Cheguei ao cliente",
+      "method": "POST",
+      "url": "/drivers/me/deliveries/{{deliveryId}}/arrived",
+      "body": { "note": "Cheguei ao destino." }
+    },
+    {
+      "name": "Concluir entrega",
+      "method": "POST",
+      "url": "/drivers/me/deliveries/{{deliveryId}}/delivered",
+      "body": { "note": "Entrega concluída e botija entregue." }
+    }
+  ]
+}

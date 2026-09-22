@@ -1,0 +1,46 @@
+{
+  "name": "gas-expresso-backend",
+  "private": true,
+  "version": "0.5.0",
+  "scripts": {
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.prisma\"",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "lint": "eslint \"src/**/*.ts\"",
+    "db:seed": "prisma db seed"
+  },
+  "dependencies": {
+    "@nestjs/common": "latest",
+    "@nestjs/config": "latest",
+    "@nestjs/core": "latest",
+    "@nestjs/jwt": "latest",
+    "@nestjs/platform-express": "latest",
+    "@nestjs/passport": "latest",
+    "bcrypt": "latest",
+    "class-transformer": "latest",
+    "class-validator": "latest",
+    "@prisma/client": "6.19.3",
+    "passport": "latest",
+    "passport-jwt": "latest",
+    "reflect-metadata": "latest",
+    "rxjs": "latest"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "12.0.3",
+    "@nestjs/schematics": "12.0.3",
+    "@nestjs/testing": "latest",
+    "@types/bcrypt": "latest",
+    "@types/node": "latest",
+    "@types/passport-jwt": "latest",
+    "prisma": "6.19.3",
+    "typescript": "6.0.3",
+    "tsx": "latest"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

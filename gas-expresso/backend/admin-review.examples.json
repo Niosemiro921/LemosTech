@@ -1,0 +1,43 @@
+{
+  "baseUrl": "http://localhost:3000/api/v1",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer <ADMIN_ACCESS_TOKEN>"
+  },
+  "requests": [
+    {
+      "name": "Listar candidaturas pendentes",
+      "method": "GET",
+      "url": "/admin/applications?status=PENDING_REVIEW"
+    },
+    {
+      "name": "Ver candidatura",
+      "method": "GET",
+      "url": "/admin/applications/<USER_ID>"
+    },
+    {
+      "name": "Aprovar candidatura",
+      "method": "POST",
+      "url": "/admin/applications/<USER_ID>/approve",
+      "body": {
+        "reason": "Documentação conferida e cadastro aprovado."
+      }
+    },
+    {
+      "name": "Rejeitar candidatura",
+      "method": "POST",
+      "url": "/admin/applications/<USER_ID>/reject",
+      "body": {
+        "reason": "Documento de identificação ilegível."
+      }
+    },
+    {
+      "name": "Solicitar documentos",
+      "method": "POST",
+      "url": "/admin/applications/<USER_ID>/request-documents",
+      "body": {
+        "reason": "Enviar os documentos em formato legível."
+      }
+    }
+  ]
+}

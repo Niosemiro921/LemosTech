@@ -1,0 +1,17 @@
+export enum DriverOfferStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  REJECTED = 'REJECTED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum DeliveryStatus {
+  ASSIGNED = 'ASSIGNED',
+  TO_PICKUP = 'TO_PICKUP',
+  AT_PICKUP = 'AT_PICKUP',
+  PICKED_UP = 'PICKED_UP',
+  IN_TRANSIT = 'IN_TRANSIT',
+  ARRIVED = 'ARRIVED',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
+}
