@@ -10,11 +10,12 @@ export class PrismaUserRepository extends UserRepositoryPort {
     super();
   }
 
-  private map(user: User): UserRecord {
+  private map(user: User & { customer?: { fullName: string } | null }): UserRecord {
     return {
       id: user.id,
       phone: user.phone,
       email: user.email,
+      name: user.customer?.fullName ?? null,
       passwordHash: user.passwordHash,
       role: user.role as Role,
       status: user.status as AccountStatus,
@@ -35,13 +36,27 @@ export class PrismaUserRepository extends UserRepositoryPort {
   }
 
   async findByPhone(phone: string): Promise<UserRecord | null> {
-    const user = await this.prisma.user.findUnique({ where: { phone } });
+    const user = await this.prisma.user.findUnique({ where: { phone }, include: { customer: true } });
     return user ? this.map(user) : null;
   }
 
   async findById(id: string): Promise<UserRecord | null> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({ where: { id }, include: { customer: true } });
     return user ? this.map(user) : null;
+  }
+
+  async updateCustomerProfile(id: string, input: { fullName?: string; email?: string | null }): Promise<UserRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      if (input.fullName !== undefined) {
+        await tx.customerProfile.update({ where: { userId: id }, data: { fullName: input.fullName } });
+      }
+      const user = await tx.user.update({
+        where: { id },
+        data: input.email === undefined ? {} : { email: input.email },
+        include: { customer: true },
+      });
+      return this.map(user);
+    });
   }
 
   async deleteById(id: string): Promise<void> {

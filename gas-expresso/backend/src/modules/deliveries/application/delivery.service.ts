@@ -97,11 +97,23 @@ export class DeliveryService {
           data: { status: nextOrderStatus },
         });
         if (orderChange.count === 1) {
+          const order = await tx.order.findUniqueOrThrow({
+            where: { id: delivery.orderId },
+            select: { customerId: true, reference: true },
+          });
           await tx.orderStatusHistory.create({
             data: {
               orderId: delivery.orderId,
               status: nextOrderStatus,
               note: note?.trim() || `Entrega avançou para ${to}.`,
+            },
+          });
+          await tx.notification.create({
+            data: {
+              userId: order.customerId,
+              title: 'Estado da entrega atualizado',
+              message: `A entrega do pedido ${order.reference} avançou para ${nextOrderStatus}.`,
+              type: 'DELIVERY',
             },
           });
         }
@@ -178,7 +190,32 @@ export class DeliveryService {
         latitude: delivery.driver.latitude,
         longitude: delivery.driver.longitude,
       },
-      order: delivery.order,
+      order: {
+        id: delivery.order.id,
+        reference: delivery.order.reference,
+        status: delivery.order.status,
+        deliveryAddress: delivery.order.deliveryAddress,
+        paymentMethod: delivery.order.paymentMethod,
+        items: delivery.order.items ?? [],
+        pricing: {
+          subtotal: delivery.order.subtotal,
+          deliveryFee: delivery.order.deliveryFee,
+          platformFee: delivery.order.platformFee,
+          discount: delivery.order.discount,
+          total: delivery.order.total,
+          currency: delivery.order.currency,
+          distanceKm: delivery.order.distanceKm,
+          estimatedMinutes: delivery.order.estimatedMinutes,
+        },
+        supplier: delivery.order.supplier
+          ? {
+              id: delivery.order.supplier.id,
+              tradeName: delivery.order.supplier.tradeName,
+              latitude: delivery.order.supplier.latitude,
+              longitude: delivery.order.supplier.longitude,
+            }
+          : null,
+      },
       statusHistory: delivery.statusHistory ?? [],
     };
   }

@@ -214,6 +214,8 @@ export class PrismaAdminReviewRepository extends AdminReviewRepositoryPort {
           targetUserId: input.targetUserId,
           action,
           reason: input.reason?.trim() || null,
+          entity: 'PARTNER',
+          entityId: input.targetUserId,
         },
       });
 

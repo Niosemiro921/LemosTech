@@ -1,69 +1,12 @@
 import { Link } from 'react-router-dom';
 
 const profiles = [
-  {
-    icon: '👤',
-    title: 'Cliente',
-    description: 'Peça gás, acompanhe entregas e consulte o seu histórico.',
-    login: '/perfil',
-    action: 'Entrar como cliente',
-    register: '/pedir',
-    registerLabel: 'Criar conta de cliente',
-    tone: 'orange',
-  },
-  {
-    icon: '🚚',
-    title: 'Entregador',
-    description: 'Fique online, receba pedidos e faça as entregas da sua zona.',
-    login: '/driver',
-    action: 'Entrar na área do entregador',
-    register: '/driver',
-    registerLabel: 'Quero ser entregador',
-    tone: 'dark',
-  },
-  {
-    icon: '🏪',
-    title: 'Fornecedor',
-    description: 'Receba pedidos, controle o stock e prepare as botijas para recolha.',
-    login: '/supplier',
-    action: 'Entrar na área do fornecedor',
-    register: '/supplier',
-    registerLabel: 'Quero ser fornecedor',
-    tone: 'soft',
-  },
+  { icon:'01', title:'Cliente', description:'Peça gás, veja o preço antes de confirmar, acompanhe a entrega e consulte o histórico.', login:'/login?role=customer', action:'Entrar como cliente', register:'/registar/customer', registerLabel:'Criar conta de cliente', tone:'orange' },
+  { icon:'02', title:'Entregador', description:'Candidate-se, aguarde a validação e, depois de aprovado, receba ofertas reais da operação.', login:'/login?role=driver', action:'Área do entregador', register:'/registar/driver', registerLabel:'Candidatar-me como entregador', tone:'dark' },
+  { icon:'03', title:'Empresa', description:'Registe a sua empresa, mantenha o stock atualizado e processe pedidos da sua zona.', login:'/login?role=supplier', action:'Área da empresa', register:'/registar/empresa', registerLabel:'Cadastrar empresa', tone:'soft' },
+  { icon:'04', title:'Admin', description:'Backoffice restrito para gestão de parceiros, pedidos, dispatch e auditoria.', login:'/login?role=admin', action:'Abrir administração', register:null, registerLabel:null, tone:'admin' },
 ];
 
 export default function AccessPage() {
-  return (
-    <div className="page access-page">
-      <section className="access-hero">
-        <span className="eyebrow"><span className="live-dot" /> Plataforma Gás Expresso</span>
-        <h1>Escolha como quer usar o Gás Expresso.</h1>
-        <p>Cliente, entregador ou fornecedor: cada perfil tem o seu próprio ambiente e fluxo de trabalho.</p>
-      </section>
-
-      <section className="access-grid" aria-label="Perfis da plataforma">
-        {profiles.map((profile) => (
-          <article className={`access-card ${profile.tone}`} key={profile.title}>
-            <div className="access-icon">{profile.icon}</div>
-            <span className="access-role">Área {profile.title.toLowerCase()}</span>
-            <h2>{profile.title}</h2>
-            <p>{profile.description}</p>
-
-            <Link to={profile.login} className="primary-btn access-main-action">{profile.action} <span>→</span></Link>
-            <Link to={profile.register} className="access-secondary-action">{profile.registerLabel}</Link>
-          </article>
-        ))}
-      </section>
-
-      <section className="access-note">
-        <div>
-          <span className="section-kicker">Arquitetura</span>
-          <h2>Uma plataforma, três experiências.</h2>
-          <p>Mais tarde, o backend vai proteger cada área com autenticação e permissões. Nesta fase do frontend, os acessos estão abertos para testarmos toda a operação.</p>
-        </div>
-        <Link to="/" className="secondary-btn">Voltar ao início</Link>
-      </section>
-    </div>
-  );
+  return <div className="page access-page"><section className="access-hero"><span className="eyebrow"><span className="live-dot"/> Operação Gás Expresso</span><h1>Uma plataforma com uma área certa para cada responsabilidade.</h1><p>Cliente, Entregador, Empresa e Administração têm navegação e permissões próprias. O frontend não expõe funções que não pertencem ao perfil.</p></section><section className="access-grid" aria-label="Perfis da plataforma">{profiles.map(profile=><article className={`access-card ${profile.tone}`} key={profile.title}><div className="access-icon access-number">{profile.icon}</div><span className="access-role">Área {profile.title.toLowerCase()}</span><h2>{profile.title}</h2><p>{profile.description}</p><Link to={profile.login} className="primary-btn access-main-action">{profile.action} <span>→</span></Link>{profile.register&&<Link to={profile.register} className="access-secondary-action">{profile.registerLabel}</Link>}</article>)}</section><section className="access-note access-trust-panel"><div><span className="section-kicker">Operação real</span><h2>Preço, stock, localização e estado vêm do servidor.</h2><p>Não criamos pedidos, saldo, entregadores, stock ou métricas artificiais no navegador. Quando um contrato não está disponível, a área identifica a integração pendente.</p></div><div className="access-trust-list"><span>✓ Permissões por perfil</span><span>✓ API como fonte de verdade</span><span>✓ Estados de carregamento e erro</span><span>✓ Módulos operacionais separados</span></div></section></div>;
 }

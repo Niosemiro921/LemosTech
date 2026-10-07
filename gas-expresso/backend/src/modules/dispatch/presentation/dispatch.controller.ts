@@ -15,6 +15,13 @@ export class DispatchController {
   constructor(private readonly dispatch: DispatchService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
+  @Roles(Role.DRIVER)
+  @Get('drivers/me')
+  status(@Req() req: Request & { user: { sub: string } }) {
+    return this.dispatch.getDriverStatus(req.user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
   @Roles(Role.SUPPLIER, Role.ADMIN)
   @Post('dispatch/orders/:orderId/start')
   start(

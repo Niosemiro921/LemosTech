@@ -1,10 +1,23 @@
 import type { GasProduct } from '../types/gas';
+import { apiGet } from '../lib/api';
 
-export const gasProducts: GasProduct[] = [
-  { id: 'gas-6', size: '6kg', label: 'Botija 6 KG', price: 4500, description: 'Ideal para uso doméstico leve.' },
-  { id: 'gas-12', size: '12kg', label: 'Botija 12 KG', price: 7200, description: 'A escolha mais popular para famílias.', popular: true },
-  { id: 'gas-45', size: '45kg', label: 'Botija 45 KG', price: 26500, description: 'Para restaurantes e uso profissional.' },
-];
+interface ApiProduct {
+  name: string;
+  description?: string | null;
+  variants: Array<{ id: string; name: string; weightKg: number; unitPrice: number }>;
+}
+
+export async function fetchGasProducts(): Promise<GasProduct[]> {
+  const products = await apiGet<ApiProduct[]>('/products', undefined, { requireAuth: false });
+  return products.flatMap((product) => product.variants.map((variant) => ({
+    id: variant.id,
+    size: `${variant.weightKg}kg` as GasProduct['size'],
+    label: variant.name,
+    price: variant.unitPrice,
+    description: product.description || product.name,
+    popular: variant.weightKg === 12,
+  })));
+}
 
 export const formatAOA = (value: number) =>
   new Intl.NumberFormat('pt-AO', { style: 'currency', currency: 'AOA', maximumFractionDigits: 0 }).format(value);

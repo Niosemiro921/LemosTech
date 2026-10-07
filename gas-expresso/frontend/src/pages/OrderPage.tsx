@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { gasProducts, formatAOA } from '../services/catalog';
+import { fetchGasProducts, formatAOA } from '../services/catalog';
 import { useOrderStore } from '../stores/orderStore';
 import { RealMap } from '../components/RealMap';
 import { reverseGeocode, searchAddress, type GeocodingResult } from '../services/geocoding';
 import type { DeliveryType } from '../types/gas';
-import { resolveCoverage, type CoverageResult } from '../services/coverage';
-import { calculateQuote } from '../services/pricing';
-import { resolveInventoryAvailability, type InventoryAvailability } from '../services/inventory';
+import { createQuote, type QuotePricingView } from '../services/quote';
+import { extractMessage } from '../services/auth';
+import type { GasProduct } from '../types/gas';
 
 
 export default function OrderPage() {
@@ -30,34 +30,50 @@ export default function OrderPage() {
   const [searchResults, setSearchResults] = useState<GeocodingResult[]>([]);
   const [searchingAddress, setSearchingAddress] = useState(false);
   const [mapResolving, setMapResolving] = useState(false);
-  const coverage: CoverageResult | null = address?.lat != null && address?.lng != null
-    ? resolveCoverage({ lat: address.lat, lng: address.lng })
-    : null;
-
-  const chosen = selectedProduct ?? gasProducts[1];
-
-  const inventory: InventoryAvailability = resolveInventoryAvailability({
-    lat: address?.lat ?? null,
-    lng: address?.lng ?? null,
-    product: chosen,
-    quantity,
-  });
+  const [products, setProducts] = useState<GasProduct[]>([]);
+  const [catalogError, setCatalogError] = useState('');
+  const [quote, setQuote] = useState<QuotePricingView | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
+  const chosen = products.find((product) => product.id === selectedProduct?.id) ?? products[0] ?? null;
 
   useEffect(() => {
-    if (!selectedProduct) setProduct(gasProducts[1]);
-  }, [selectedProduct, setProduct]);
+    let active = true;
+    fetchGasProducts().then((items) => {
+      if (!active) return;
+      setProducts(items);
+      if (items.length && !items.some((item) => item.id === selectedProduct?.id)) setProduct(items[0]);
+    }).catch((cause: unknown) => {
+      if (active) setCatalogError(extractMessage(cause, 'Não foi possível carregar o catálogo.'));
+    });
+    return () => { active = false; };
+  }, [selectedProduct?.id, setProduct]);
 
-  const quote = useMemo(
-    () =>
-      calculateQuote({
-        product: chosen,
-        quantity,
-        deliveryType,
-        distanceKm: coverage?.distanceKm ?? null,
-        etaMinutes: coverage?.etaMinutes ?? null,
-      }),
-    [chosen, quantity, deliveryType, coverage?.distanceKm, coverage?.etaMinutes],
-  );
+  useEffect(() => {
+    if (!chosen || !address || address.lat == null || address.lng == null) {
+      setQuote(null);
+      return;
+    }
+    let active = true;
+    setQuoteLoading(true);
+    setQuoteError('');
+    createQuote({
+      product: chosen,
+      quantity,
+      deliveryType,
+      latitude: address.lat,
+      longitude: address.lng,
+      deliveryAddress: address.address,
+      scheduledAt,
+    }).then((result) => {
+      if (!active) return;
+      setQuote(result);
+      if (!result.available) setQuoteError(result.message ?? 'Sem disponibilidade para este endereço.');
+    }).catch((cause: unknown) => {
+      if (active) setQuoteError(extractMessage(cause, 'Não foi possível calcular a estimativa.'));
+    }).finally(() => { if (active) setQuoteLoading(false); });
+    return () => { active = false; };
+  }, [chosen, quantity, deliveryType, address, scheduledAt]);
 
   const requestLocation = () => {
     if (!navigator.geolocation) {
@@ -161,13 +177,16 @@ export default function OrderPage() {
   };
 
   const continueOrder = () => {
+    if (!chosen || !products.length) {
+      setCatalogError('O catálogo ainda não está disponível.');
+      return;
+    }
     if (!address) {
       requestLocation();
       return;
     }
     if (deliveryType === 'scheduled' && !scheduledAt) return;
-    if (!coverage?.available) return;
-    if (!inventory.available) return;
+    if (!quote?.available) return;
     navigate('/confirmar');
   };
 
@@ -191,9 +210,11 @@ export default function OrderPage() {
         <section className="order-main">
           <div className="step-card">
             <div className="step-head"><span className="step-number">01</span><div><h2>Escolha a botija</h2><p>Selecione o tamanho que precisa.</p></div></div>
+            {catalogError && <div className="form-error" role="alert">{catalogError}</div>}
+            {!products.length && !catalogError && <p role="status">A carregar produtos disponíveis…</p>}
             <div className="product-grid">
-              {gasProducts.map(product => (
-                <button key={product.id} onClick={() => setProduct(product)} className={`product-card ${chosen.id === product.id ? 'selected' : ''}`} aria-pressed={chosen.id === product.id}>
+              {products.map(product => (
+                <button key={product.id} onClick={() => setProduct(product)} className={`product-card ${chosen?.id === product.id ? 'selected' : ''}`} aria-pressed={chosen?.id === product.id}>
                   {product.popular && <span className="popular-badge">Mais pedido</span>}
                   <div className="cylinder">GÁS</div>
                   <strong>{product.label}</strong>
@@ -216,10 +237,10 @@ export default function OrderPage() {
             <div className="step-head"><span className="step-number">02</span><div><h2>Quando quer receber?</h2><p>Escolha entre urgência ou planeamento.</p></div></div>
             <div className="delivery-options">
               <button className={deliveryType === 'express' ? 'delivery-option selected' : 'delivery-option'} onClick={() => setDeliveryType('express')} aria-pressed={deliveryType === 'express'}>
-                <span>⚡</span><div><strong>Entrega expressa</strong><small>Prioridade · estimativa 20–40 min</small></div><b>+ {formatAOA(calculateQuote({ product: chosen, quantity: 1, deliveryType: 'express', distanceKm: coverage?.distanceKm ?? null }).deliveryFee)}</b>
+                <span>⚡</span><div><strong>Entrega expressa</strong><small>Prioridade · estimativa 20–40 min</small></div>                <b>{deliveryType === 'express' && quote?.available ? `+ ${formatAOA(quote.deliveryFee)}` : 'Preço calculado no endereço'}</b>
               </button>
               <button className={deliveryType === 'scheduled' ? 'delivery-option selected' : 'delivery-option'} onClick={() => setDeliveryType('scheduled')} aria-pressed={deliveryType === 'scheduled'}>
-                <span>◷</span><div><strong>Entrega programada</strong><small>Escolha um horário mais conveniente</small></div><b>+ {formatAOA(calculateQuote({ product: chosen, quantity: 1, deliveryType: 'scheduled', distanceKm: coverage?.distanceKm ?? null }).deliveryFee)}</b>
+                <span>◷</span><div><strong>Entrega programada</strong><small>Escolha um horário mais conveniente</small></div><b>{deliveryType === 'scheduled' && quote?.available ? `+ ${formatAOA(quote.deliveryFee)}` : 'Preço calculado no endereço'}</b>
               </button>
             </div>
             {deliveryType === 'scheduled' && (
@@ -267,60 +288,27 @@ export default function OrderPage() {
             </button>
             <RealMap compact value={address?.lat != null && address?.lng != null ? { lat: address.lat, lng: address.lng } : null} onChange={handleMapChange} />
             {address && <div className="selected-location-card"><span>✓</span><div><strong>Ponto de entrega</strong><small>{address.address}</small></div></div>}
-            {coverage && (
-              <div className={`coverage-card ${coverage.available ? 'available' : 'unavailable'}`}>
-                <div className="coverage-icon">{coverage.available ? '✓' : '!'}</div>
-                <div className="coverage-content">
-                  <strong>{coverage.available ? 'Entrega disponível nesta área' : 'Área ainda não coberta'}</strong>
-                  <span>{coverage.note}</span>
-                  {coverage.available && coverage.distanceKm != null && coverage.etaMinutes && (
-                    <div className="coverage-meta">
-                      <span>≈ {coverage.distanceKm.toFixed(1)} km até o centro operacional</span>
-                      <span>⚡ {coverage.etaMinutes[0]}–{coverage.etaMinutes[1]} min</span>
-                    </div>
-                  )}
-                  {!coverage.available && coverage.distanceKm != null && coverage.hub && (
-                    <span>A operação mais próxima está a aproximadamente {coverage.distanceKm.toFixed(1)} km.</span>
-                  )}
-                </div>
-              </div>
-            )}
-            {address && coverage?.available && (
-              <div className={`inventory-card ${inventory.available ? 'available' : 'unavailable'} ${inventory.status === 'low' ? 'low' : ''}`}>
-                <div className="inventory-icon">{inventory.available ? '✓' : '!'}</div>
-                <div className="inventory-content">
-                  <div className="inventory-title-row">
-                    <strong>{inventory.available ? 'Stock disponível' : 'Stock insuficiente'}</strong>
-                    {inventory.supplier?.verified && <span className="verified-pill">✓ Parceiro verificado</span>}
-                  </div>
-                  <span>{inventory.message}</span>
-                  {inventory.supplier && (
-                    <div className="inventory-meta">
-                      <span>{inventory.supplier.area}</span>
-                      <span>{inventory.availableUnits} unidade(s) disponíveis</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            <p className="map-help">A distância e o stock exibidos nesta fase são estimativas de interface. O backend fará a validação oficial e a reserva antes do pagamento.</p>
+            {address && quoteLoading && <p role="status">A validar endereço, stock e preço com o servidor…</p>}
+            {quote?.available && <div className="coverage-card available"><div className="coverage-icon">✓</div><div className="coverage-content"><strong>Disponibilidade confirmada</strong><span>Empresa: {quote.supplier?.tradeName ?? 'Parceiro local'}</span>{quote.distanceKm != null && <div className="coverage-meta"><span>{quote.distanceKm.toFixed(1)} km</span>{quote.estimatedMinutes && <span>≈ {quote.estimatedMinutes[0]}–{quote.estimatedMinutes[1]} min</span>}</div>}</div></div>}
+            {quoteError && <div className="coverage-card unavailable" role="alert"><div className="coverage-icon">!</div><div className="coverage-content"><strong>Não foi possível confirmar disponibilidade</strong><span>{quoteError}</span></div></div>}
+            <p className="map-help">Disponibilidade, stock e preço são consultados ao servidor antes da criação do pedido.</p>
           </div>
         </section>
 
         <aside className="order-summary">
           <div className="summary-top"><span>Resumo do pedido</span><span className="secure">● Seguro</span></div>
-          <div className="summary-product"><div className="cylinder small">GÁS</div><div><strong>{quantity} × {chosen.label}</strong><small>Preço estimado do produto</small></div></div>
+          <div className="summary-product"><div className="cylinder small">GÁS</div><div><strong>{chosen ? `${quantity} × ${chosen.label}` : 'A carregar catálogo…'}</strong><small>Preço validado pelo servidor</small></div></div>
           <div className="summary-lines">
-            <div><span>Produtos</span><strong>{formatAOA(quote.subtotal)}</strong></div>
-            <div><span>Entrega</span><strong>{formatAOA(quote.deliveryFee)}</strong></div>
-            <div><span>Comissão Gás Expresso</span><strong>{formatAOA(quote.platformFee)}</strong></div>
-            {quote.discount > 0 && <div><span>Desconto</span><strong>- {formatAOA(quote.discount)}</strong></div>}
+            <div><span>Produtos</span><strong>{quote?.available ? formatAOA(quote.subtotal) : '—'}</strong></div>
+            <div><span>Entrega</span><strong>{quote?.available ? formatAOA(quote.deliveryFee) : '—'}</strong></div>
+            <div><span>Comissão Gás Expresso</span><strong>{quote?.available ? formatAOA(quote.platformFee) : '—'}</strong></div>
+            {quote?.available && quote.discount > 0 && <div><span>Desconto</span><strong>- {formatAOA(quote.discount)}</strong></div>}
           </div>
-          <div className="summary-total"><span>Total estimado</span><strong>{formatAOA(quote.total)}</strong></div>
-          <button className="primary-btn full" onClick={continueOrder} disabled={locationStatus === 'loading' || (deliveryType === 'scheduled' && !scheduledAt) || Boolean(address && coverage && (!coverage.available || !inventory.available))}>
-            {!address ? 'Definir localização' : !coverage?.available ? 'Área sem cobertura' : !inventory.available ? 'Stock insuficiente' : 'Continuar para confirmação'} <span>→</span>
+          <div className="summary-total"><span>Total estimado</span><strong>{quote?.available ? formatAOA(quote.total) : '—'}</strong></div>
+          <button className="primary-btn full" onClick={continueOrder} disabled={locationStatus === 'loading' || quoteLoading || !chosen || (deliveryType === 'scheduled' && !scheduledAt) || Boolean(address && !quote?.available)}>
+            {!address ? 'Definir localização' : quoteLoading ? 'A validar disponibilidade…' : quote?.available ? 'Continuar para confirmação' : 'Disponibilidade indisponível'} <span>→</span>
           </button>
-          <p className="summary-note">Estimativa atual da interface. O backend calculará e confirmará o preço oficial antes do pagamento.</p>
+          <p className="summary-note">O preço é calculado pelo servidor e validado novamente ao confirmar.</p>
         </aside>
       </div>
       <Link to="/" className="back-link">← Voltar para início</Link>

@@ -11,4 +11,4 @@ Fluxo:
 5. Confirmar recolha
 6. Gerir stock por capacidade
 
-Os dados atuais são mocks de frontend. A próxima integração deve substituir `src/services/supplier.ts` por API real.
+Pedidos, inventário e localização são carregados e atualizados através das rotas autenticadas do backend em `/suppliers/me`. Quando um pedido fica pronto, o painel inicia o dispatch; se o dispatch falhar, permite tentar novamente.

@@ -1,16 +1,9 @@
+import { apiPost } from '../lib/api';
+
 export type DispatchStage = 'searching_supplier' | 'reserving_stock' | 'searching_driver' | 'driver_assigned' | 'pickup' | 'on_route' | 'arrived' | 'delivered';
-export interface DriverSnapshot { id:string; name:string; initials:string; rating:number; vehicle:string; plate:string; etaMinutes:number; distanceKm:number; }
-export interface DispatchSnapshot { orderId:string; stage:DispatchStage; title:string; description:string; progress:number; driver:DriverSnapshot|null; supplierName:string|null; updatedAt:string; }
-const driver: DriverSnapshot = { id:'DRV-001', name:'João Manuel', initials:'JM', rating:4.9, vehicle:'Moto de entrega', plate:'LD-24-18', etaMinutes:18, distanceKm:3.2 };
-const timeline: DispatchSnapshot[] = [
-{orderId:'GE-000124',stage:'searching_supplier',title:'A procurar fornecedor',description:'Estamos a confirmar disponibilidade na sua zona.',progress:12,driver:null,supplierName:null,updatedAt:new Date().toISOString()},
-{orderId:'GE-000124',stage:'reserving_stock',title:'A reservar a sua botija',description:'Stock encontrado. Estamos a garantir a unidade para o seu pedido.',progress:25,driver:null,supplierName:'Gás Expresso — Parceiro Luanda Centro',updatedAt:new Date().toISOString()},
-{orderId:'GE-000124',stage:'searching_driver',title:'A procurar entregador',description:'Estamos a encontrar um entregador disponível perto do fornecedor.',progress:38,driver:null,supplierName:'Gás Expresso — Parceiro Luanda Centro',updatedAt:new Date().toISOString()},
-{orderId:'GE-000124',stage:'driver_assigned',title:'Entregador encontrado',description:'João Manuel aceitou o pedido e está a dirigir-se ao fornecedor.',progress:52,driver,supplierName:'Gás Expresso — Parceiro Luanda Centro',updatedAt:new Date().toISOString()},
-{orderId:'GE-000124',stage:'pickup',title:'A recolher o gás',description:'O entregador está a levantar a botija e a preparar a saída.',progress:66,driver:{...driver,etaMinutes:22,distanceKm:4.1},supplierName:'Gás Expresso — Parceiro Luanda Centro',updatedAt:new Date().toISOString()},
-{orderId:'GE-000124',stage:'on_route',title:'A caminho da sua morada',description:'O entregador já saiu. Acompanhe a aproximação no mapa.',progress:78,driver,supplierName:'Gás Expresso — Parceiro Luanda Centro',updatedAt:new Date().toISOString()},
-{orderId:'GE-000124',stage:'arrived',title:'O entregador chegou',description:'Verifique a botija e combine o método de pagamento com o entregador.',progress:92,driver:{...driver,etaMinutes:0,distanceKm:0},supplierName:'Gás Expresso — Parceiro Luanda Centro',updatedAt:new Date().toISOString()},
-{orderId:'GE-000124',stage:'delivered',title:'Pedido entregue',description:'Entrega concluída. Obrigado por utilizar o Gás Expresso.',progress:100,driver:{...driver,etaMinutes:0,distanceKm:0},supplierName:'Gás Expresso — Parceiro Luanda Centro',updatedAt:new Date().toISOString()}
-];
-export function createDispatch(orderId='GE-000124'){sessionStorage.setItem('gas-expresso-dispatch-order',orderId);sessionStorage.setItem('gas-expresso-dispatch-started-at',new Date().toISOString());}
-export function getDispatchSnapshot(orderId:string, elapsedSeconds:number):DispatchSnapshot{const index=Math.min(Math.floor(elapsedSeconds/3),timeline.length-1);return {...timeline[index],orderId,updatedAt:new Date().toISOString()};}
+export interface DispatchSnapshot { orderId: string; stage: DispatchStage; title: string; description: string; progress: number; driver: unknown | null; supplierName: string | null; updatedAt: string; }
+
+/** Dispatch is server-owned. No client-side simulation is allowed. */
+export async function startDispatch(orderId: string) {
+  return apiPost(`/dispatch/orders/${encodeURIComponent(orderId)}/start`);
+}

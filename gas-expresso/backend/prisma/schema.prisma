@@ -38,6 +38,11 @@ model User {
   driver         DriverProfile?
   supplier       SupplierProfile?
   customerOrders Order[]          @relation("CustomerOrders")
+  addresses      CustomerAddress[]
+  notifications  Notification[]
+  supportTickets SupportTicket[]
+  incidents      Incident[]
+  documents      BusinessDocument[]
 
   @@index([role, status])
 }
@@ -50,6 +55,167 @@ model CustomerProfile {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CustomerAddress {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  label        String
+  address      String
+  reference    String?
+  municipality String?
+  province     String?
+  latitude     Float?
+  longitude    Float?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isDefault])
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  title     String
+  message   String
+  type      String   @default("INFO")
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model SupportTicket {
+  id        String   @id @default(uuid()) @db.Uuid
+  reference String   @unique
+  userId    String   @db.Uuid
+  category  String
+  subject   String
+  message   String
+  status    String   @default("OPEN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Incident {
+  id          String   @id @default(uuid()) @db.Uuid
+  reference   String   @unique
+  userId      String   @db.Uuid
+  orderId     String?  @db.Uuid
+  category    String
+  severity    String
+  status      String   @default("OPEN")
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, severity])
+}
+
+model BusinessDocument {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  type       String
+  name       String
+  status     String    @default("PENDING_REVIEW")
+  expiresAt  DateTime?
+  reviewNote String?
+  uploadedAt DateTime  @default(now())
+  reviewedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, uploadedAt])
+  @@index([status, expiresAt])
+}
+
+model SupplierSchedule {
+  id         String   @id @default(uuid()) @db.Uuid
+  supplierId String   @db.Uuid
+  dayOfWeek  Int
+  enabled    Boolean  @default(false)
+  openTime   String?
+  closeTime  String?
+  updatedAt  DateTime @updatedAt
+
+  supplier SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, dayOfWeek])
+}
+
+model DriverWallet {
+  id                      String   @id @default(uuid()) @db.Uuid
+  driverId                String   @unique @db.Uuid
+  balance                 Int      @default(0)
+  reservedBalance         Int      @default(0)
+  minimumOperatingBalance Int      @default(10000)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  driver       DriverProfile       @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+  topUps       WalletTopUp[]
+
+  @@index([balance, reservedBalance])
+}
+
+enum WalletTransactionType {
+  TOP_UP
+  WITHDRAWAL
+  ADJUSTMENT
+}
+
+model WalletTransaction {
+  id           String                @id @default(uuid()) @db.Uuid
+  walletId     String                @db.Uuid
+  type         WalletTransactionType
+  amount       Int
+  balanceAfter Int
+  description  String
+  reference    String?
+  createdAt    DateTime              @default(now())
+
+  wallet DriverWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+}
+
+enum WalletTopUpStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WalletTopUp {
+  id           String            @id @default(uuid()) @db.Uuid
+  walletId     String            @db.Uuid
+  amount       Int
+  status       WalletTopUpStatus @default(PENDING)
+  reference    String            @unique
+  reviewNote   String?
+  reviewedById String?           @db.Uuid
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  reviewedAt   DateTime?
+
+  wallet DriverWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([walletId, createdAt])
 }
 
 model DriverProfile {
@@ -71,6 +237,7 @@ model DriverProfile {
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   offers     DriverOffer[]
   deliveries Delivery[]
+  wallet     DriverWallet?
 
   @@index([documentNumber])
   @@index([isOnline, latitude, longitude])
@@ -91,6 +258,7 @@ model SupplierProfile {
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   inventory  InventoryItem[]
   orders     Order[]
+  schedules  SupplierSchedule[]
 
   @@index([nif])
   @@index([latitude, longitude])
@@ -100,18 +268,26 @@ enum AdminReviewAction {
   APPROVED
   REJECTED
   DOCUMENTS_REQUESTED
+  PARTNER_SUSPENDED
+  PARTNER_REACTIVATED
+  DISPATCH_RETRIED
+  WALLET_TOP_UP_APPROVED
+  WALLET_TOP_UP_REJECTED
 }
 
 model AuditLog {
   id           String            @id @default(uuid()) @db.Uuid
   actorUserId  String            @db.Uuid
-  targetUserId String            @db.Uuid
+  targetUserId String?           @db.Uuid
   action       AdminReviewAction
   reason       String?
+  entity       String            @default("PARTNER")
+  entityId     String?
   createdAt    DateTime          @default(now())
 
   @@index([targetUserId, createdAt])
   @@index([actorUserId, createdAt])
+  @@index([entity, entityId, createdAt])
 }
 
 model Product {
@@ -245,6 +421,7 @@ model Order {
   inventoryMovements    InventoryMovement[]
   delivery              Delivery?
   driverOffers          DriverOffer[]
+  incidents             Incident[]
 
   @@index([customerId, createdAt])
   @@index([supplierId, status, createdAt])

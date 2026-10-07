@@ -1,12 +1,14 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AccountStatus,
+  AdminReviewAction as PrismaAdminReviewAction,
   DeliveryStatus as PrismaDeliveryStatus,
   DriverOfferStatus as PrismaDriverOfferStatus,
   OrderStatus,
   UserRole,
 } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import { DriverFinanceService } from '../../driver-finance/application/driver-finance.service';
 
 interface CandidateDriver {
   id: string;
@@ -19,11 +21,15 @@ interface CandidateDriver {
   ratingAverage: number;
   acceptanceRate: number;
   distanceKm: number;
+  balance: number;
 }
 
 @Injectable()
 export class DispatchService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly driverFinance: DriverFinanceService,
+  ) {}
 
   async startForOrder(orderId: string, maxOffers = 3, actorUserId?: string, actorRole?: UserRole) {
     if (maxOffers < 1 || maxOffers > 10) throw new ConflictException('maxOffers deve estar entre 1 e 10.');
@@ -55,9 +61,30 @@ export class DispatchService {
             note: 'Dispatch iniciado: procurando entregadores elegíveis.',
           },
         });
+        if (actorRole === UserRole.ADMIN && actorUserId) {
+          await tx.auditLog.create({
+            data: {
+              actorUserId,
+              action: PrismaAdminReviewAction.DISPATCH_RETRIED,
+              reason: 'Reexecução de dispatch solicitada.',
+              entity: 'ORDER',
+              entityId: order.id,
+            },
+          });
+        }
       });
     } else if (order.status !== OrderStatus.DRIVER_SEARCHING) {
       throw new ConflictException(`O dispatch não pode começar no estado ${order.status}.`);
+    } else if (actorRole === UserRole.ADMIN && actorUserId) {
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: PrismaAdminReviewAction.DISPATCH_RETRIED,
+          reason: 'Reexecução de dispatch solicitada.',
+          entity: 'ORDER',
+          entityId: order.id,
+        },
+      });
     }
 
     const totalWeightKg = order.items.reduce((sum, item) => sum + item.weightKg * item.quantity, 0);
@@ -71,6 +98,10 @@ export class DispatchService {
       } as const;
     }
 
+    await this.prisma.driverOffer.updateMany({
+      where: { orderId: order.id, status: PrismaDriverOfferStatus.PENDING, expiresAt: { lte: new Date() } },
+      data: { status: PrismaDriverOfferStatus.EXPIRED, respondedAt: new Date() },
+    });
     const existing = await this.prisma.driverOffer.findMany({
       where: { orderId: order.id, status: PrismaDriverOfferStatus.PENDING },
       select: { driverId: true },
@@ -155,6 +186,71 @@ export class DispatchService {
       distanceToPickupKm: offer.distanceToPickupKm,
       estimatedPickupMinutes: offer.estimatedPickupMinutes,
       order: this.publicOrder(offer.order),
+    }));
+  }
+
+  async getDriverStatus(userId: string) {
+    const driver = await this.getDriver(userId);
+    const completedDeliveries = await this.prisma.delivery.count({
+      where: { driverId: driver.id, status: PrismaDeliveryStatus.DELIVERED },
+    });
+    return {
+      id: driver.id,
+      fullName: driver.fullName,
+      vehicleType: driver.vehicleType,
+      isOnline: driver.isOnline,
+      latitude: driver.latitude,
+      longitude: driver.longitude,
+      ratingAverage: driver.ratingAverage,
+      completedDeliveries,
+    };
+  }
+
+  async getAdminQueue() {
+    const orders = await this.prisma.order.findMany({
+      where: { status: { in: [OrderStatus.READY_FOR_PICKUP, OrderStatus.DRIVER_SEARCHING] } },
+      include: {
+        items: true,
+        supplier: { select: { tradeName: true, latitude: true, longitude: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+    });
+
+    return Promise.all(orders.map(async (order) => {
+      const candidates = order.supplier && order.supplier.latitude !== null && order.supplier.longitude !== null
+        ? await this.findCandidates(
+            order.supplier.latitude,
+            order.supplier.longitude,
+            order.items.reduce((total, item) => total + item.weightKg * item.quantity, 0),
+          )
+        : [];
+      const recommended = candidates[0];
+
+      return {
+        orderId: order.id,
+        reference: order.reference,
+        status: order.status,
+        pickup: {
+          address: order.supplier?.tradeName ?? 'Fornecedor indisponível',
+          latitude: order.supplier?.latitude ?? null,
+          longitude: order.supplier?.longitude ?? null,
+        },
+        dropoff: {
+          address: order.deliveryAddress,
+          latitude: order.latitude,
+          longitude: order.longitude,
+        },
+        recommendedDriver: recommended
+          ? {
+              id: recommended.id,
+              name: recommended.fullName,
+              priorityScore: Number((-this.scoreCandidate(recommended)).toFixed(2)),
+              balance: recommended.balance,
+              distanceKm: Number(recommended.distanceKm.toFixed(2)),
+            }
+          : null,
+      };
     }));
   }
 
@@ -267,6 +363,7 @@ export class DispatchService {
 
   async startDriver(userId: string, latitude: number, longitude: number) {
     const driver = await this.getDriver(userId);
+    await this.driverFinance.assertOperatingBalance(userId);
     return this.prisma.driverProfile.update({
       where: { id: driver.id },
       data: { isOnline: true, latitude, longitude, lastLocationAt: new Date() },
@@ -297,7 +394,7 @@ export class DispatchService {
       where: { id: orderId, customerId: userId },
       include: {
         supplier: { select: { id: true, tradeName: true, latitude: true, longitude: true } },
-        delivery: { include: { driver: true } },
+        delivery: { include: { driver: { include: { user: { select: { phone: true } } } } } },
         statusHistory: { orderBy: { createdAt: 'asc' } },
         items: true,
       },
@@ -313,6 +410,7 @@ export class DispatchService {
             driver: {
               id: order.delivery.driver.id,
               fullName: order.delivery.driver.fullName,
+              phone: order.delivery.driver.user.phone,
               vehicleType: order.delivery.driver.vehicleType,
               latitude: order.delivery.driver.latitude,
               longitude: order.delivery.driver.longitude,
@@ -350,6 +448,7 @@ export class DispatchService {
   }
 
   private async findCandidates(latitude: number, longitude: number, totalWeightKg: number): Promise<CandidateDriver[]> {
+    const minimumBalance = Number(process.env.MINIMUM_DRIVER_OPERATING_BALANCE ?? '10000');
     const drivers = await this.prisma.driverProfile.findMany({
       where: {
         isOnline: true,
@@ -357,6 +456,7 @@ export class DispatchService {
         longitude: { not: null },
         vehicleCapacityKg: { gte: totalWeightKg },
         user: { status: AccountStatus.ACTIVE, role: UserRole.DRIVER },
+        wallet: { is: { balance: { gte: Number.isSafeInteger(minimumBalance) && minimumBalance >= 0 ? minimumBalance : 10000 } } },
         deliveries: {
           none: {
             status: {
@@ -373,6 +473,7 @@ export class DispatchService {
         },
       },
       orderBy: [{ ratingAverage: 'desc' }, { acceptanceRate: 'desc' }],
+      include: { wallet: { select: { balance: true } } },
       take: 100,
     });
 
@@ -396,6 +497,7 @@ export class DispatchService {
           ratingAverage: driver.ratingAverage,
           acceptanceRate: driver.acceptanceRate,
           distanceKm,
+          balance: driver.wallet?.balance ?? 0,
         };
       })
       .filter((driver) => driver.distanceKm <= radius)

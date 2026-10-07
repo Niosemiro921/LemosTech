@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DeliveryType, OrderStatus, UserRole } from '@prisma/client';
+import { DeliveryType, OrderStatus, ProductVariant, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { QuoteOrderDto } from '../dto/quote-order.dto';
@@ -13,11 +13,43 @@ interface CandidateSupplier {
   inventory: Array<{ variantId: string; availableQty: number }>;
 }
 
+type OrderQuote =
+  | { available: false; message: string }
+  | {
+      available: true;
+      supplier: CandidateSupplier;
+      normalizedItems: Array<{ variantId: string; quantity: number }>;
+      variants: Map<string, ProductVariant>;
+      pricing: {
+        subtotal: number;
+        deliveryFee: number;
+        platformFee: number;
+        discount: 0;
+        total: number;
+        currency: 'AOA';
+        distanceKm: number;
+        estimatedMinutes: number;
+        pricingVersion: 'v1';
+      };
+    };
+
 @Injectable()
 export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
   async quote(dto: QuoteOrderDto) {
+    const result = await this.calculateQuote(dto);
+    if (!result.available) return result;
+
+    return {
+      available: true,
+      supplier: { id: result.supplier.id, tradeName: result.supplier.tradeName },
+      pricing: result.pricing,
+      payment: 'PAY_ON_DELIVERY',
+    } as const;
+  }
+
+  private async calculateQuote(dto: QuoteOrderDto): Promise<OrderQuote> {
     const normalizedItems = this.normalizeItems(dto);
     const variants = await this.loadVariants(normalizedItems.map((item) => item.variantId));
     const candidate = this.findSupplier(normalizedItems, dto.latitude, dto.longitude, await this.loadCandidates());
@@ -34,79 +66,131 @@ export class OrderService {
 
     return {
       available: true,
-      supplier: { id: candidate.id, tradeName: candidate.tradeName },
-      pricing: { subtotal, deliveryFee, platformFee, discount: 0, total: subtotal + deliveryFee + platformFee, currency: 'AOA', distanceKm, estimatedMinutes, pricingVersion: 'v1' },
-      payment: 'PAY_ON_DELIVERY',
+      supplier: candidate,
+      normalizedItems,
+      variants,
+      pricing: {
+        subtotal,
+        deliveryFee,
+        platformFee,
+        discount: 0,
+        total: subtotal + deliveryFee + platformFee,
+        currency: 'AOA',
+        distanceKm,
+        estimatedMinutes,
+        pricingVersion: 'v1',
+      },
     } as const;
   }
 
   async create(customerId: string, dto: CreateOrderDto, idempotencyKey?: string) {
-    if (idempotencyKey?.trim()) {
-      const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: idempotencyKey.trim() }, include: { items: true, supplier: true } });
+    const normalizedIdempotencyKey = idempotencyKey?.trim() || null;
+    if (normalizedIdempotencyKey) {
+      const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: normalizedIdempotencyKey }, include: { items: true, supplier: true } });
       if (existing) {
         if (existing.customerId !== customerId) throw new ConflictException('Idempotency-Key já utilizado por outra conta.');
         return this.publicOrder(existing);
       }
     }
     if (dto.acceptEstimatedPrice === false) throw new BadRequestException('É necessário aceitar o preço estimado para criar o pedido.');
-    const quote = await this.quote(dto);
+    const quote = await this.calculateQuote(dto);
     if (!quote.available) throw new ConflictException(quote.message);
-
-    const normalizedItems = this.normalizeItems(dto);
-    const variants = await this.loadVariants(normalizedItems.map((item) => item.variantId));
-    const supplier = this.findSupplier(normalizedItems, dto.latitude, dto.longitude, await this.loadCandidates());
-    if (!supplier) throw new ConflictException('O stock disponível mudou. Tente novamente.');
 
     const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
     if (scheduledAt && scheduledAt.getTime() <= Date.now()) throw new BadRequestException('A data programada deve estar no futuro.');
 
     const reference = `GE-${new Date().getUTCFullYear()}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-    return this.prisma.$transaction(async (tx) => {
-      for (const item of normalizedItems) {
-        const updated = await tx.inventoryItem.updateMany({
-          where: { supplierId: supplier.id, variantId: item.variantId, availableQty: { gte: item.quantity } },
-          data: { availableQty: { decrement: item.quantity }, reservedQty: { increment: item.quantity } },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        for (const item of quote.normalizedItems) {
+          const updated = await tx.inventoryItem.updateMany({
+            where: {
+              supplierId: quote.supplier.id,
+              variantId: item.variantId,
+              availableQty: { gte: item.quantity },
+            },
+            data: { availableQty: { decrement: item.quantity }, reservedQty: { increment: item.quantity } },
+          });
+          if (updated.count !== 1) throw new ConflictException('O stock foi alterado por outro pedido. Tente novamente.');
+        }
+
+        const order = await tx.order.create({
+          data: {
+            reference,
+            idempotencyKey: normalizedIdempotencyKey,
+            customerId,
+            supplierId: quote.supplier.id,
+            status: OrderStatus.AWAITING_SUPPLIER_ACCEPTANCE,
+            deliveryType: dto.deliveryType,
+            paymentMethod: 'PAY_ON_DELIVERY',
+            scheduledAt,
+            deliveryAddress: dto.deliveryAddress.trim(),
+            latitude: dto.latitude,
+            longitude: dto.longitude,
+            subtotal: quote.pricing.subtotal,
+            deliveryFee: quote.pricing.deliveryFee,
+            platformFee: quote.pricing.platformFee,
+            discount: quote.pricing.discount,
+            total: quote.pricing.total,
+            distanceKm: quote.pricing.distanceKm,
+            estimatedMinutes: quote.pricing.estimatedMinutes,
+            pricingVersion: quote.pricing.pricingVersion,
+            items: {
+              create: quote.normalizedItems.map((item) => {
+                const variant = quote.variants.get(item.variantId)!;
+                return {
+                  variantId: variant.id,
+                  variantName: variant.name,
+                  weightKg: variant.weightKg,
+                  quantity: item.quantity,
+                  unitPrice: variant.unitPrice,
+                  lineTotal: variant.unitPrice * item.quantity,
+                };
+              }),
+            },
+            statusHistory: { create: { status: OrderStatus.AWAITING_SUPPLIER_ACCEPTANCE, note: 'Pedido criado e stock reservado.' } },
+          },
+          include: { items: true, supplier: true },
         });
-        if (updated.count !== 1) throw new ConflictException('O stock foi alterado por outro pedido. Tente novamente.');
-      }
+        await tx.notification.create({
+          data: {
+            userId: customerId,
+            title: 'Pedido recebido',
+            message: `O pedido ${order.reference} foi enviado para confirmação da empresa.`,
+            type: 'ORDER',
+          },
+        });
 
-      const order = await tx.order.create({
-        data: {
-          reference,
-          idempotencyKey: idempotencyKey?.trim() || null,
-          customerId,
-          supplierId: supplier.id,
-          status: OrderStatus.AWAITING_SUPPLIER_ACCEPTANCE,
-          deliveryType: dto.deliveryType,
-          paymentMethod: 'PAY_ON_DELIVERY',
-          scheduledAt,
-          deliveryAddress: dto.deliveryAddress.trim(),
-          latitude: dto.latitude,
-          longitude: dto.longitude,
-          subtotal: quote.pricing.subtotal,
-          deliveryFee: quote.pricing.deliveryFee,
-          platformFee: quote.pricing.platformFee,
-          discount: 0,
-          total: quote.pricing.total,
-          distanceKm: quote.pricing.distanceKm,
-          estimatedMinutes: quote.pricing.estimatedMinutes,
-          pricingVersion: quote.pricing.pricingVersion,
-          items: { create: normalizedItems.map((item) => {
-            const variant = variants.get(item.variantId)!;
-            return { variantId: variant.id, variantName: variant.name, weightKg: variant.weightKg, quantity: item.quantity, unitPrice: variant.unitPrice, lineTotal: variant.unitPrice * item.quantity };
-          }) },
-          statusHistory: { create: { status: OrderStatus.AWAITING_SUPPLIER_ACCEPTANCE, note: 'Pedido criado e stock reservado.' } },
-        },
-        include: { items: true, supplier: true },
+        for (const item of quote.normalizedItems) {
+          const inventory = await tx.inventoryItem.findUniqueOrThrow({
+            where: { supplierId_variantId: { supplierId: quote.supplier.id, variantId: item.variantId } },
+          });
+          await tx.inventoryMovement.create({
+            data: {
+              inventoryId: inventory.id,
+              orderId: order.id,
+              type: 'RESERVE',
+              quantity: item.quantity,
+              note: `Reserva do pedido ${order.reference}.`,
+            },
+          });
+        }
+
+        return this.publicOrder(order);
       });
-
-      for (const item of normalizedItems) {
-        const inventory = await tx.inventoryItem.findUniqueOrThrow({ where: { supplierId_variantId: { supplierId: supplier.id, variantId: item.variantId } } });
-        await tx.inventoryMovement.create({ data: { inventoryId: inventory.id, orderId: order.id, type: 'RESERVE', quantity: item.quantity, note: `Reserva do pedido ${order.reference}.` } });
+    } catch (error) {
+      if (normalizedIdempotencyKey && isUniqueConstraintError(error)) {
+        const existing = await this.prisma.order.findUnique({
+          where: { idempotencyKey: normalizedIdempotencyKey },
+          include: { items: true, supplier: true },
+        });
+        if (existing) {
+          if (existing.customerId !== customerId) throw new ConflictException('Idempotency-Key já utilizado por outra conta.');
+          return this.publicOrder(existing);
+        }
       }
-
-      return this.publicOrder(order);
-    });
+      throw error;
+    }
   }
 
   async listCustomerOrders(customerId: string) {
@@ -137,14 +221,26 @@ export class OrderService {
       const order = await tx.order.findFirst({ where: { id, supplierId: supplier.id }, include: { items: true } });
       if (!order) throw new NotFoundException('Pedido não encontrado para este fornecedor.');
       assertTransition(order.status, OrderStatus.CANCELLED);
+      const changed = await tx.order.updateMany({
+        where: { id, supplierId: supplier.id, status: order.status },
+        data: { status: OrderStatus.CANCELLED },
+      });
+      if (changed.count !== 1) throw new ConflictException('O estado do pedido mudou. Atualize e tente novamente.');
       for (const item of order.items) {
         const currentInventory = await tx.inventoryItem.findUnique({ where: { supplierId_variantId: { supplierId: supplier.id, variantId: item.variantId } } });
         if (!currentInventory || currentInventory.reservedQty < item.quantity) throw new ConflictException('A reserva de stock do pedido está inconsistente.');
         const inventory = await tx.inventoryItem.update({ where: { supplierId_variantId: { supplierId: supplier.id, variantId: item.variantId } }, data: { availableQty: { increment: item.quantity }, reservedQty: { decrement: item.quantity } } });
         await tx.inventoryMovement.create({ data: { inventoryId: inventory.id, orderId: order.id, type: 'RELEASE', quantity: item.quantity, note: note.trim() } });
       }
-      await tx.order.update({ where: { id }, data: { status: OrderStatus.CANCELLED } });
       await tx.orderStatusHistory.create({ data: { orderId: id, status: OrderStatus.CANCELLED, note: note.trim() } });
+      await tx.notification.create({
+        data: {
+          userId: order.customerId,
+          title: 'Pedido cancelado',
+          message: `O pedido ${order.reference} foi cancelado pela empresa.`,
+          type: 'ORDER',
+        },
+      });
       return { id, reference: order.reference, status: OrderStatus.CANCELLED };
     });
   }
@@ -155,9 +251,21 @@ export class OrderService {
       const order = await tx.order.findFirst({ where: { id, supplierId: supplier.id } });
       if (!order) throw new NotFoundException('Pedido não encontrado para este fornecedor.');
       assertTransition(order.status, to);
-      const updated = await tx.order.update({ where: { id }, data: { status: to } });
+      const changed = await tx.order.updateMany({
+        where: { id, supplierId: supplier.id, status: order.status },
+        data: { status: to },
+      });
+      if (changed.count !== 1) throw new ConflictException('O estado do pedido mudou. Atualize e tente novamente.');
       await tx.orderStatusHistory.create({ data: { orderId: id, status: to, note } });
-      return { id: updated.id, reference: updated.reference, status: updated.status };
+      await tx.notification.create({
+        data: {
+          userId: order.customerId,
+          title: 'Estado do pedido atualizado',
+          message: `O pedido ${order.reference} avançou para ${to}.`,
+          type: 'ORDER',
+        },
+      });
+      return { id: order.id, reference: order.reference, status: to };
     });
   }
 
@@ -219,3 +327,7 @@ export class OrderService {
 }
 
 function round2(value: number) { return Math.round(value * 100) / 100; }
+
+function isUniqueConstraintError(error: unknown): error is { code: 'P2002' } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}

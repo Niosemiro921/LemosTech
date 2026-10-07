@@ -4,9 +4,11 @@ import { AdminService } from './application/admin.service';
 import { AdminReviewRepositoryPort } from './domain/admin-review.repository';
 import { PrismaAdminReviewRepository } from './infrastructure/prisma-admin-review.repository';
 import { AuthModule } from '../auth/application/auth.module';
+import { DispatchModule } from '../dispatch/dispatch.module';
+import { DriverFinanceModule } from '../driver-finance/driver-finance.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, DispatchModule, DriverFinanceModule],
   controllers: [AdminController],
   providers: [
     AdminService,

@@ -32,6 +32,14 @@ export class InventoryService {
     return this.prisma.supplierProfile.update({ where: { id: supplier.id }, data: { latitude, longitude }, select: { id: true, tradeName: true, latitude: true, longitude: true } });
   }
 
+  async getLocation(userId: string) {
+    const supplier = await this.supplier(userId);
+    return {
+      latitude: supplier.latitude,
+      longitude: supplier.longitude,
+    };
+  }
+
   private async supplier(userId: string) {
     const supplier = await this.prisma.supplierProfile.findUnique({ where: { userId } });
     if (!supplier) throw new NotFoundException('Perfil de fornecedor não encontrado.');

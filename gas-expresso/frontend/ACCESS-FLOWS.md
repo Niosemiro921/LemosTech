@@ -1,6 +1,6 @@
 # Acessos dos perfis
 
-Rotas de teste da V1:
+Rotas principais:
 
 - `/acesso` — seletor principal de perfis
 - `/perfil` — cliente
@@ -9,4 +9,4 @@ Rotas de teste da V1:
 - `/driver/pedido/:orderId` — operação de pedido do entregador
 - `/supplier/pedido/:orderId` — operação de pedido do fornecedor
 
-Na fase de backend, `/driver` e `/supplier` serão protegidas por autenticação + role + status de aprovação.
+As páginas privadas exigem autenticação e role. Fornecedores e entregadores também precisam de aprovação administrativa antes de operar.

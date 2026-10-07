@@ -1,36 +1,46 @@
-# Gás Expresso — Frontend
+# Gás Expresso — Frontend 3.0.0
 
-## V1 — Inventário e disponibilidade
+Frontend React + TypeScript + Vite para a operação de entrega de gás.
 
-Nesta versão o fluxo de pedido inclui uma camada de disponibilidade de fornecedores/stock.
+## Perfis
 
-### O que foi adicionado
+- Cliente — pedidos, pagamento, rastreamento e conta.
+- Entregador — operação móvel, localização, ofertas, carteira, ganhos acumulados, documentos e incidentes.
+- Fornecedor/Empresa — portal independente ERP + CRM.
+- Admin — backoffice de operação.
 
-- `src/services/inventory.ts`
-  - rede de parceiros simulada
-  - stock por tamanho de botija
-  - verificação de quantidade solicitada
-  - seleção do parceiro elegível mais adequado
-  - estado `available`, `low` ou `unavailable`
-- `OrderPage.tsx`
-  - mostra disponibilidade após localização + cobertura
-  - identifica parceiro verificado
-  - mostra unidades disponíveis
-  - bloqueia a confirmação quando não existe stock suficiente
+## Instalação
 
-### Fonte atual dos dados
+```bash
+npm ci
+npm run typecheck
+npm run dev
+```
 
-O inventário ainda é **mock de frontend**. Nenhum stock real é consumido ou reservado nesta etapa.
+API local:
 
-Quando o backend estiver implementado, a função de inventário será substituída por uma chamada à API, mantendo a mesma interface de domínio.
+```text
+http://localhost:5048/api/v1
+```
 
-### Próxima integração
+## Navegação principal
 
-`GET /inventory/availability` ou endpoint equivalente deverá receber:
+### Cliente
+`/perfil` · `/pedir` · `/rastrear` · `/enderecos`
 
-- localização do cliente
-- produto
-- quantidade
-- tipo de entrega
+### Entregador
+`/driver` · `/driver/pedidos` · `/driver/saldo` · `/driver/ganhos` · `/driver/perfil` · `/driver/documentos` · `/driver/incidentes`
 
-E devolver a disponibilidade oficial, fornecedor elegível, ETA e dados necessários para o cálculo final.
+### Empresa
+`/fornecedor` · `/fornecedor/stock` · `/fornecedor/pedidos` · `/fornecedor/lotes` · `/fornecedor/financeiro` · `/fornecedor/clientes` · `/fornecedor/interacoes` · `/fornecedor/segmentacao` · `/fornecedor/relatorios`
+
+### Admin
+`/admin` · `/admin/partners` · `/admin/orders` · `/admin/dispatch` · `/admin/audit` · `/admin/wallet/top-ups`
+
+## Regra de integração
+
+Nenhum dado operacional é fabricado no frontend. O servidor é a fonte de verdade para preço, stock, pedidos, saldo, prioridade, permissões e localização.
+
+Quando um módulo solicitado não tem endpoint identificável no contrato disponível no frontend, a interface informa a integração pendente e não cria dados de demonstração.
+
+Ver `IMPLEMENTATION-SUMMARY.md` e `BACKEND-CONTRACT-PENDENCIES.md`.

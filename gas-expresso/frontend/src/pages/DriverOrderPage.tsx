@@ -1,92 +1,78 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { RealMap } from '../components/RealMap';
+import { formatAOA } from '../services/catalog';
+import { advanceDriverDelivery, fetchDriverDelivery, type DriverDelivery } from '../services/driver';
+import { extractMessage } from '../services/auth';
 
-type Stage = 'incoming' | 'accepted' | 'pickup' | 'on_route' | 'arrived' | 'completed';
-
-const stages: Record<Stage, { title: string; description: string; cta: string }> = {
-  incoming: { title: 'Novo pedido disponível', description: 'Revise o valor, a distância e os pontos de recolha e entrega antes de aceitar.', cta: 'Aceitar pedido' },
-  accepted: { title: 'Pedido aceite', description: 'Dirija-se ao fornecedor para recolher a botija.', cta: 'Iniciar deslocação ao fornecedor' },
-  pickup: { title: 'Recolha no fornecedor', description: 'Quando receber a botija, confirme a recolha.', cta: 'Confirmar recolha' },
-  on_route: { title: 'A caminho do cliente', description: 'O cliente já pode acompanhar o progresso da entrega.', cta: 'Marcar como cheguei' },
-  arrived: { title: 'Você chegou', description: 'Entregue a botija e receba o pagamento combinado com o cliente.', cta: 'Concluir entrega' },
-  completed: { title: 'Entrega concluída', description: 'O pedido terminou e o valor foi registado nos seus ganhos.', cta: 'Voltar ao painel' },
+const nextAction: Record<string, string> = {
+  ASSIGNED: 'Iniciar deslocação à empresa',
+  TO_PICKUP: 'Confirmar chegada à empresa',
+  AT_PICKUP: 'Confirmar recolha da botija',
+  PICKED_UP: 'Iniciar deslocação ao cliente',
+  IN_TRANSIT: 'Marcar chegada ao cliente',
+  ARRIVED: 'Confirmar entrega concluída',
 };
 
 export default function DriverOrderPage() {
   const navigate = useNavigate();
   const { orderId } = useParams();
-  const [stage, setStage] = useState<Stage>('incoming');
-  const point = { lat: -8.9165, lng: 13.1802 };
+  const [delivery, setDelivery] = useState<DriverDelivery | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const nextStage = (): Stage | undefined => ({
-    incoming: 'accepted',
-    accepted: 'pickup',
-    pickup: 'on_route',
-    on_route: 'arrived',
-    arrived: 'completed',
-    completed: undefined,
-  }[stage]);
+  const refresh = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      setDelivery(await fetchDriverDelivery(orderId));
+      setError('');
+    } catch (cause) {
+      setError(extractMessage(cause, 'Não foi possível carregar a entrega.'));
+    }
+  }, [orderId]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
-  const handleAction = () => {
-    const next = nextStage();
-    if (!next) navigate('/driver');
-    else setStage(next);
+  const advance = async () => {
+    if (!delivery) return;
+    setBusy(true);
+    setError('');
+    try {
+      let location: { latitude: number; longitude: number } | undefined;
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, maximumAge: 15000 }));
+          location = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        } catch {
+          location = undefined;
+        }
+      }
+      await advanceDriverDelivery(delivery.id, delivery.status, location);
+      await refresh();
+      if (delivery.status === 'ARRIVED') navigate('/driver', { replace: true });
+    } catch (cause) {
+      setError(extractMessage(cause, 'Não foi possível atualizar o estado da entrega.'));
+    } finally {
+      setBusy(false);
+    }
   };
 
+  const itemLabel = delivery?.order.items.map((item) => `${item.quantity} × ${item.variantName}`).join(', ');
   return (
     <div className="page operation-detail-page driver-order-page">
-      <div className="operation-detail-topbar">
-        <button className="back-link" onClick={() => navigate('/driver')}>← Voltar ao painel</button>
-        <span className="section-kicker">Entregador · Pedido #{orderId ?? 'GE-000124'}</span>
-      </div>
-
-      <div className="driver-request-banner">
-        <div>
-          <span className="section-kicker">Oferta de entrega</span>
-          <h1>{stages[stage].title}</h1>
-          <p>{stages[stage].description}</p>
+      <div className="operation-detail-topbar"><button className="back-link" onClick={() => navigate('/driver')}>← Voltar ao painel</button><span className="section-kicker">Entrega · {delivery?.order.reference ?? orderId ?? ''}</span></div>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      {!delivery ? <p role="status">A carregar os detalhes da entrega…</p> : <>
+        <div className="driver-request-banner"><div><span className="section-kicker">Estado da entrega</span><h1>{delivery.status}</h1><p>{delivery.order.reference} · {itemLabel}</p></div></div>
+        <div className="operation-detail-grid">
+          <main className="operation-main-card">
+            <div className="driver-offer-grid"><div><small>Valor do pedido</small><strong>{formatAOA(delivery.order.pricing.total)}</strong><span>Pagamento na entrega</span></div><div><small>Estado</small><strong>{delivery.status}</strong><span>Atualizado pelo servidor</span></div><div><small>Produto</small><strong>{delivery.order.items.reduce((sum, item) => sum + item.weightKg * item.quantity, 0)} KG</strong><span>{itemLabel}</span></div></div>
+            <div className="driver-route-card"><div className="route-point"><span className="route-dot pickup-dot" /><div><small>RECOLHA</small><strong>{delivery.pickup.address}</strong><span>{delivery.order.supplier?.tradeName ?? 'Empresa'}</span></div></div><div className="route-line" /><div className="route-point"><span className="route-dot drop-dot" /><div><small>ENTREGA</small><strong>{delivery.dropoff.address}</strong><span>Morada do cliente</span></div></div></div>
+            <div className="driver-map-wrap detail-map"><RealMap value={{ lat: delivery.dropoff.latitude, lng: delivery.dropoff.longitude }} /><div className="driver-map-overlay"><strong>Destino</strong><span>{delivery.dropoff.address}</span></div></div>
+            {nextAction[delivery.status] ? <button className="primary-btn full" disabled={busy} onClick={() => void advance()}>{busy ? 'A atualizar…' : nextAction[delivery.status]} <span>→</span></button> : <p>Esta entrega não tem mais ações pendentes.</p>}
+          </main>
+          <aside className="operation-side-card"><div className="section-kicker">Detalhes do pedido</div><div className="side-info-row"><span>Referência</span><strong>{delivery.order.reference}</strong></div><div className="side-info-row"><span>Produto</span><strong>{itemLabel}</strong></div><div className="side-info-row"><span>Cliente</span><strong>{delivery.dropoff.address}</strong></div><div className="side-info-row"><span>Pagamento</span><strong>Na entrega</strong></div><div className="side-divider" /><p>As alterações de estado são verificadas e registadas pelo servidor.</p><Link className="secondary-btn full" to="/driver">Painel do entregador</Link></aside>
         </div>
-        {stage === 'incoming' && <span className="urgent-chip">Agora</span>}
-      </div>
-
-      <div className="operation-detail-grid">
-        <main className="operation-main-card">
-          <div className="driver-offer-grid">
-            <div><small>Você recebe</small><strong>1.500 Kz</strong><span>por esta entrega</span></div>
-            <div><small>Distância</small><strong>6,8 km</strong><span>≈ 17 min</span></div>
-            <div><small>Carga</small><strong>12 KG</strong><span>1 botija</span></div>
-          </div>
-
-          <div className="driver-route-card">
-            <div className="route-point"><span className="route-dot pickup-dot" /><div><small>RECOLHA</small><strong>Viana Central</strong><span>Fornecedor verificado</span></div></div>
-            <div className="route-line" />
-            <div className="route-point"><span className="route-dot drop-dot" /><div><small>ENTREGA</small><strong>Talatona, Luanda</strong><span>Cliente Gás Expresso</span></div></div>
-          </div>
-
-          <div className="driver-map-wrap detail-map">
-            <RealMap value={point} />
-            <div className="driver-map-overlay"><strong>Rota</strong><span>Viana Central → Talatona</span><small>≈ 6,8 km</small></div>
-          </div>
-
-          <button className="primary-btn full" onClick={handleAction}>{stages[stage].cta} <span>→</span></button>
-          {stage === 'incoming' && <button className="danger-outline-btn full" onClick={() => navigate('/driver')}>Recusar pedido</button>}
-
-          <p className="demo-note">No backend real, aceitar e recusar serão operações transacionais do Dispatch Engine.</p>
-        </main>
-
-        <aside className="operation-side-card">
-          <div className="section-kicker">Detalhes</div>
-          <div className="side-info-row"><span>Pedido</span><strong>#{orderId ?? 'GE-000124'}</strong></div>
-          <div className="side-info-row"><span>Produto</span><strong>Botija 12 KG</strong></div>
-          <div className="side-info-row"><span>Cliente</span><strong>Gás Expresso</strong></div>
-          <div className="side-info-row"><span>Pagamento</span><strong>Na entrega</strong></div>
-          <div className="side-divider" />
-          <strong>Regras da entrega</strong>
-          <p>Confirme a recolha antes de iniciar a rota para o cliente. O sistema atualizará o acompanhamento automaticamente.</p>
-          <Link className="secondary-btn full" to="/driver">Painel do entregador</Link>
-        </aside>
-      </div>
+      </>}
     </div>
   );
 }

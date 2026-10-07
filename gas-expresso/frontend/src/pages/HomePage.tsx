@@ -1,16 +1,15 @@
 import { Link } from 'react-router-dom';
-import { MapPreview } from '../components/MapPreview';
 
 const benefits = [
-  { icon: '⚡', title: 'Entrega rápida', text: 'Peça agora e acompanhe o percurso até à sua porta.' },
-  { icon: '🛡', title: 'Parceiros verificados', text: 'Trabalhamos com fornecedores e entregadores validados.' },
-  { icon: '📍', title: 'Localização em tempo real', text: 'Use a sua localização para encontrar cobertura perto de si.' },
+  { icon: '⚡', title: 'Pedido com preço antes de confirmar', text: 'A plataforma consulta o servidor para calcular produto, entrega, comissão e disponibilidade.' },
+  { icon: '✓', title: 'Rede profissional validada', text: 'Empresas e entregadores passam por um processo de aprovação antes de operar.' },
+  { icon: '⌖', title: 'Acompanhamento do pedido', text: 'Depois de confirmar, acompanha o estado da operação e a localização quando disponível.' },
 ];
 
 const steps = [
-  ['01', 'Escolha o gás', 'Selecione a capacidade e a quantidade que precisa.'],
-  ['02', 'Confirme o local', 'Indique onde quer receber ou use a sua localização.'],
-  ['03', 'Acompanhe a entrega', 'Saiba quem está a entregar e acompanhe o pedido.'],
+  ['01', 'Escolha a botija', 'Selecione a capacidade e a quantidade no catálogo real da plataforma.'],
+  ['02', 'Defina o endereço', 'Use a pesquisa, a sua localização ou ajuste o ponto diretamente no mapa.'],
+  ['03', 'Confirme e acompanhe', 'Veja o preço calculado, confirme e acompanhe o pedido até à entrega.'],
 ];
 
 function PinIcon() {
@@ -25,7 +24,7 @@ export default function HomePage() {
           <span className="eyebrow"><span className="live-dot" /> Entrega de gás em Angola</span>
           <h1>Gás quando precisa.<br /><span>Na sua porta.</span></h1>
           <p className="hero-lead">
-            Encontre gás perto de si, escolha como receber e acompanhe a entrega do início ao fim.
+            O Gás Expresso liga clientes, empresas e entregadores numa única operação, com preço e estado confirmados pelo servidor.
           </p>
 
           <div className="hero-actions">
@@ -33,27 +32,44 @@ export default function HomePage() {
             <Link to="/rastrear" className="secondary-btn">Rastrear pedido</Link>
           </div>
 
-          <div className="hero-trust" aria-label="Garantias">
+          <div className="hero-trust" aria-label="Compromissos da plataforma">
             <span>✓ Preço transparente</span>
-            <span>✓ Parceiros verificados</span>
-            <span>✓ Acompanhamento</span>
+            <span>✓ Operação por perfil</span>
+            <span>✓ Estados sincronizados</span>
           </div>
         </div>
 
         <div className="hero-visual">
-          <div className="map-shell">
-            <MapPreview />
-            <div className="map-search-card">
-              <div className="map-search-icon"><PinIcon /></div>
+          <div className="home-operation-card">
+            <div className="home-operation-head">
               <div>
-                <small>A sua localização</small>
-                <strong>Defina onde quer receber</strong>
+                <span className="section-kicker">Como funciona</span>
+                <h2>Uma operação feita para ser acompanhada.</h2>
               </div>
-              <Link to="/pedir" className="map-search-action" aria-label="Definir localização">→</Link>
+              <span className="home-operation-badge">API + mapa real</span>
             </div>
-            <div className="map-status-card">
-              <span className="status-dot" />
-              <div><strong>Entrega disponível</strong><small>Encontre parceiros na sua zona</small></div>
+
+            <div className="home-operation-route">
+              <div className="home-operation-point">
+                <span className="home-operation-icon"><PinIcon /></span>
+                <div><strong>Local de entrega</strong><small>Definido no pedido pelo cliente</small></div>
+              </div>
+              <span className="home-operation-line" />
+              <div className="home-operation-point">
+                <span className="home-operation-icon success">✓</span>
+                <div><strong>Empresa + stock</strong><small>Disponibilidade validada pelo servidor</small></div>
+              </div>
+              <span className="home-operation-line" />
+              <div className="home-operation-point">
+                <span className="home-operation-icon dark">→</span>
+                <div><strong>Entregador</strong><small>Atribuição e localização durante a operação</small></div>
+              </div>
+            </div>
+
+            <div className="home-operation-trust">
+              <div><strong>Sem preço inventado</strong><span>O valor mostrado vem da cotação da API.</span></div>
+              <div><strong>Sem stock fictício</strong><span>A disponibilidade é verificada antes da confirmação.</span></div>
+              <div><strong>Sem estado simulado</strong><span>O acompanhamento usa o estado real do pedido.</span></div>
             </div>
           </div>
         </div>
@@ -64,9 +80,9 @@ export default function HomePage() {
         <div>
           <span className="section-kicker">Comece por aqui</span>
           <h2>Quer receber gás onde está?</h2>
-          <p>Defina a localização e veja as opções disponíveis na sua zona.</p>
+          <p>Defina a localização no pedido e a plataforma verifica a cobertura e o preço da sua entrega.</p>
         </div>
-        <Link to="/pedir" className="primary-btn">Usar minha localização <span>→</span></Link>
+        <Link to="/pedir" className="primary-btn">Definir localização <span>→</span></Link>
       </section>
 
       <section className="home-section">
@@ -75,7 +91,7 @@ export default function HomePage() {
             <span className="section-kicker">Por que Gás Expresso?</span>
             <h2>Uma experiência simples de ponta a ponta.</h2>
           </div>
-          <p>Menos chamadas. Menos espera. Mais controlo sobre a sua entrega.</p>
+          <p>Menos chamadas. Menos incerteza. Mais controlo sobre a operação.</p>
         </div>
 
         <div className="highlights-grid">
@@ -93,7 +109,7 @@ export default function HomePage() {
         <div className="section-heading compact">
           <div>
             <span className="section-kicker">Como funciona</span>
-            <h2>Do pedido à porta, sem complicação.</h2>
+            <h2>Do pedido à porta, sem atalhos.</h2>
           </div>
           <Link to="/pedir" className="soft-link">Fazer pedido →</Link>
         </div>
@@ -112,14 +128,15 @@ export default function HomePage() {
       <section className="split-section home-final-section">
         <div className="dark-panel">
           <span className="section-kicker light">Feito para crescer em Angola</span>
-          <h2>Uma rede que aproxima clientes, parceiros e entregadores.</h2>
-          <p>O Gás Expresso nasceu para tornar a compra e a entrega de gás mais simples, previsível e acompanhável.</p>
+          <h2>Uma rede que aproxima clientes, empresas e entregadores.</h2>
+          <p>O Gás Expresso organiza a operação desde a cotação até à entrega, sem apresentar informação que não tenha sido confirmada pelo servidor.</p>
           <Link to="/pedir" className="light-btn">Começar pedido <span>→</span></Link>
         </div>
         <div className="white-panel final-stats">
-          <div className="mini-stat"><strong>6 KG</strong><span>Capacidade disponível</span></div>
-          <div className="mini-stat"><strong>12 KG</strong><span>Opção mais procurada</span></div>
-          <div className="mini-stat"><strong>45 KG</strong><span>Para maior consumo</span></div>
+          <div className="mini-stat"><strong>6 KG</strong><span>Formato disponível no catálogo</span></div>
+          <div className="mini-stat"><strong>12 KG</strong><span>Formato disponível no catálogo</span></div>
+          <div className="mini-stat"><strong>45 KG</strong><span>Formato disponível no catálogo</span></div>
+          <small className="home-final-note">A disponibilidade final depende do catálogo e stock devolvidos pelo servidor.</small>
         </div>
       </section>
     </div>

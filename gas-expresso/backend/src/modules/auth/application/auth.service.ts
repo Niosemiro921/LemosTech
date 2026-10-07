@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AccountStatus, Role } from '../../../shared/domain/auth.enums';
@@ -10,6 +10,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { RegisterDriverDto } from './dto/register-driver.dto';
 import { RegisterSupplierDto } from './dto/register-supplier.dto';
+import { UpdateCustomerProfileDto } from './dto/update-customer-profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -76,6 +77,24 @@ export class AuthService {
     return this.publicUser(user);
   }
 
+  async updateCustomerProfile(userId: string, dto: UpdateCustomerProfileDto) {
+    const fullName = dto.fullName?.trim();
+    const email = dto.email === undefined ? undefined : dto.email?.trim().toLowerCase() || null;
+    if (fullName === undefined && email === undefined) {
+      throw new BadRequestException('Informe pelo menos um dado para atualizar.');
+    }
+
+    try {
+      const user = await this.users.updateCustomerProfile(userId, { fullName, email });
+      return this.publicUser(user);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+        throw new ConflictException('O email informado já está associado a outra conta.');
+      }
+      throw error;
+    }
+  }
+
   private async registerUser(
     phone: string,
     email: string | undefined,
@@ -101,15 +120,18 @@ export class AuthService {
       throw new InternalServerErrorException('Não foi possível concluir o cadastro.');
     }
 
+    const currentUser = await this.users.findById(user.id);
+    if (!currentUser) throw new InternalServerErrorException('Não foi possível carregar a conta criada.');
     return {
       message: role === Role.CUSTOMER ? 'Conta criada com sucesso.' : 'Candidatura enviada para análise.',
-      user: this.publicUser(user),
+      user: this.publicUser(currentUser),
     };
   }
 
-  private publicUser(user: Pick<UserRecord, 'id' | 'phone' | 'email' | 'role' | 'status' | 'reviewedAt' | 'reviewNote'>) {
+  private publicUser(user: Pick<UserRecord, 'id' | 'name' | 'phone' | 'email' | 'role' | 'status' | 'reviewedAt' | 'reviewNote'>) {
     return {
       id: user.id,
+      name: user.name ?? undefined,
       phone: user.phone,
       email: user.email,
       role: user.role,
