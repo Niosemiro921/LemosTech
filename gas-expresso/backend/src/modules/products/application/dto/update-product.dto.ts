@@ -10,5 +10,6 @@ export class UpdateProductDto {
 export class UpdateVariantDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) unitPrice?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) cylinderPrice?: number;
   @IsOptional() @IsBoolean() active?: boolean;
 }

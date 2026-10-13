@@ -7,6 +7,7 @@ Refatoração do frontend por perfil, sem fixtures, mocks ou dados operacionais 
 - Cliente: `/perfil`, `/pedir`, `/rastrear`, `/enderecos`.
 - Entregador: `/driver`, `/driver/pedidos`, `/driver/saldo`, `/driver/ganhos`, `/driver/perfil`, `/driver/documentos`, `/driver/incidentes`.
 - Fornecedor/Empresa: `/fornecedor` e módulos ERP/CRM.
+- Prestador: `/prestador`.
 - Admin: `/admin`, parceiros, pedidos, dispatch, auditoria e fila de recargas.
 - `Pedir gás` e `Rastrear` só existem no menu do Cliente e estão protegidos nas rotas.
 
@@ -20,7 +21,6 @@ Refatoração do frontend por perfil, sem fixtures, mocks ou dados operacionais 
 - Carteira, saldo disponível, saldo reservado, mínimo operacional, prioridade e política vêm da API.
 - A recarga cria uma solicitação no endpoint existente e aguarda confirmação do servidor.
 - Levantamento só é mostrado/ativado quando o endpoint real for configurado; nenhum endpoint fictício é chamado.
-- O histórico de ganhos usa `/drivers/me/earnings`; acumula 90% da taxa de entrega concluída, sem afirmar que o valor já foi levantado ou creditado na carteira operacional.
 
 ## Cliente e tracking
 - Tracking usa `/orders/mine/{id}/tracking` e WebSocket configurável em `VITE_REALTIME_URL`.

@@ -157,7 +157,7 @@ export class DeliveryService {
   private async getActiveDriver(userId: string) {
     const driver = await this.prisma.driverProfile.findUnique({ where: { userId }, include: { user: true } });
     if (!driver) throw new NotFoundException('Perfil de entregador não encontrado.');
-    if (driver.user.role !== UserRole.DRIVER || driver.user.status !== AccountStatus.ACTIVE) {
+    if (!([UserRole.DRIVER, UserRole.PRESTADOR] as UserRole[]).includes(driver.user.role) || driver.user.status !== AccountStatus.ACTIVE) {
       throw new ConflictException('O entregador ainda não está autorizado a operar.');
     }
     return driver;

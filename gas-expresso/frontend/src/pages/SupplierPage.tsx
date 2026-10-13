@@ -2,51 +2,65 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { extractMessage } from '../services/auth';
 import { formatAOA } from '../services/catalog';
-import { fetchSupplierInventory, fetchSupplierOrders, type SupplierInventoryItem, type SupplierOrder } from '../services/supplier';
+import { fetchSupplierInventory, fetchSupplierLocation, fetchSupplierOrders, type SupplierInventoryItem, type SupplierLocation, type SupplierOrder } from '../services/supplier';
+
+const activeStatuses = new Set(['AWAITING_SUPPLIER_ACCEPTANCE', 'SUPPLIER_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'DRIVER_SEARCHING', 'DRIVER_ASSIGNED', 'DRIVER_ACCEPTED', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED']);
+const doneStatuses = new Set(['DELIVERED', 'COMPLETED']);
+const statusLabel: Record<string, string> = { AWAITING_SUPPLIER_ACCEPTANCE: 'A aguardar confirmação', SUPPLIER_ACCEPTED: 'Aceite', PREPARING: 'Em preparação', READY_FOR_PICKUP: 'Pronto para recolha', DRIVER_SEARCHING: 'A procurar entregador', DRIVER_ASSIGNED: 'Entregador atribuído', DRIVER_ACCEPTED: 'Entregador aceitou', PICKED_UP: 'Recolhido', IN_TRANSIT: 'Em entrega', ARRIVED: 'Chegou ao destino', DELIVERED: 'Entregue', COMPLETED: 'Concluído', CANCELLED: 'Cancelado', FAILED: 'Falhou' };
 
 export default function SupplierPage() {
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [inventory, setInventory] = useState<SupplierInventoryItem[]>([]);
+  const [location, setLocation] = useState<SupplierLocation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [errors, setErrors] = useState<string[]>([]);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const [orderData, stockData] = await Promise.all([fetchSupplierOrders(), fetchSupplierInventory()]);
-      setOrders(orderData);
-      setInventory(stockData);
-      setError('');
-    } catch (cause) {
-      setError(extractMessage(cause, 'Não foi possível carregar o dashboard do fornecedor.'));
-    } finally {
-      setLoading(false);
-    }
+  async function load(isRefresh = false) {
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    const [orderResult, inventoryResult, locationResult] = await Promise.allSettled([fetchSupplierOrders(), fetchSupplierInventory(), fetchSupplierLocation()]);
+    const nextErrors: string[] = [];
+    if (orderResult.status === 'fulfilled') setOrders(orderResult.value); else nextErrors.push(`Pedidos: ${extractMessage(orderResult.reason, 'não foi possível carregar')}`);
+    if (inventoryResult.status === 'fulfilled') setInventory(inventoryResult.value); else nextErrors.push(`Stock: ${extractMessage(inventoryResult.reason, 'não foi possível carregar')}`);
+    if (locationResult.status === 'fulfilled') setLocation(locationResult.value); else nextErrors.push(`Localização: ${extractMessage(locationResult.reason, 'não foi possível carregar')}`);
+    setErrors(nextErrors); setLoading(false); setRefreshing(false);
   }
   useEffect(() => { void load(); }, []);
 
-  const metrics = useMemo(() => ({
-    sales: orders.reduce((sum, order) => sum + (order.pricing.subtotal ?? 0), 0),
-    stock: inventory.reduce((sum, item) => sum + Math.max(0, item.availableQty ?? 0), 0),
-    reserved: inventory.reduce((sum, item) => sum + Math.max(0, item.reservedQty ?? 0), 0),
-    low: inventory.filter((item) => item.availableQty <= item.reorderLevel).length,
-  }), [orders, inventory]);
+  const metrics = useMemo(() => {
+    const lowStock = inventory.filter((item) => item.availableQty <= item.reorderLevel);
+    const completed = orders.filter((order) => doneStatuses.has(order.status));
+    return {
+      totalOrders: orders.length,
+      activeOrders: orders.filter((order) => activeStatuses.has(order.status)).length,
+      completedOrders: completed.length,
+      completedSales: completed.reduce((sum, order) => sum + (order.pricing?.subtotal ?? 0), 0),
+      available: inventory.reduce((sum, item) => sum + Math.max(0, item.availableQty), 0),
+      reserved: inventory.reduce((sum, item) => sum + Math.max(0, item.reservedQty), 0),
+      lowStock,
+    };
+  }, [orders, inventory]);
 
-  return <div className="page supplier-dashboard-page supplier-module-page">
-    <div className="workspace-heading"><div><span className="section-kicker">ERP / Dashboard</span><h1>Visão operacional do fornecedor.</h1><p>Vendas e stock calculados exclusivamente a partir dos dados devolvidos pela API.</p></div><button className="secondary-btn" onClick={() => void load()} disabled={loading}>{loading ? 'A atualizar…' : 'Atualizar'}</button></div>
-    {error && <div className="form-error" role="alert">{error}</div>}
-    {loading && <div className="loading-panel" role="status">A carregar os indicadores da operação…</div>}
-    {!loading && <>
-      <div className="supplier-kpi-grid">
-        <article><small>Valor bruto dos pedidos</small><strong>{formatAOA(metrics.sales)}</strong><span>Subtotal dos pedidos devolvidos</span></article>
-        <article><small>Stock disponível</small><strong>{metrics.stock}</strong><span>Unidades disponíveis na API</span></article>
-        <article><small>Stock reservado</small><strong>{metrics.reserved}</strong><span>Unidades já reservadas</span></article>
-        <article className={metrics.low ? 'alert-kpi' : ''}><small>Alertas de stock</small><strong>{metrics.low}</strong><span>Itens abaixo do nível mínimo</span></article>
-      </div>
-      <section className="workspace-panel"><div className="panel-title"><div><span className="section-kicker">Pedido / stock</span><h2>Operação recente</h2></div></div>
-        {orders.length ? <div className="supplier-dashboard-grid"><div><h3>Pedidos</h3>{orders.slice(0, 8).map((order) => <Link className="dashboard-list-row" to={`/fornecedor/pedidos?order=${encodeURIComponent(order.id)}`} key={order.id}><span><strong>{order.reference}</strong><small>{new Date(order.createdAt).toLocaleString('pt-AO')} · {order.status}</small></span><strong>{formatAOA(order.pricing.subtotal)}</strong></Link>)}</div><div><h3>Stock a vigiar</h3>{inventory.filter((item) => item.availableQty <= item.reorderLevel).slice(0, 8).map((item) => <Link className="dashboard-list-row" to="/fornecedor/stock" key={item.id}><span><strong>{item.variant.name}</strong><small>{item.variant.sku} · mínimo {item.reorderLevel}</small></span><strong>{item.availableQty}</strong></Link>)}{inventory.filter((item) => item.availableQty <= item.reorderLevel).length === 0 && <div className="empty-state compact"><h3>Sem alertas</h3><p>Nenhum item abaixo do nível mínimo devolvido pelo servidor.</p></div>}</div></div> : <div className="empty-state"><h3>Nenhum pedido devolvido</h3><p>A operação não tem pedidos disponíveis neste momento.</p></div>}
+  return <div className="supplier-module-page page supplier-dashboard-page">
+    <header className="supplier-home-hero"><div><span className="section-kicker">PORTAL DA EMPRESA · ERP</span><h1>A operação da sua empresa, num só lugar.</h1><p>Pedidos, inventário e localização operacional consultados directamente na API.</p><span className="supplier-data-note"><span className="live-dot"/> Dados do servidor · {new Date().toLocaleDateString('pt-AO')}</span></div><button className="secondary-btn" onClick={() => void load(true)} disabled={loading || refreshing}>{refreshing ? 'A actualizar…' : '↻ Actualizar dados'}</button></header>
+    {errors.length > 0 && <div className="form-error" role="alert"><strong>Algumas áreas não foram carregadas.</strong><ul>{errors.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+    {loading ? <div className="loading-panel" role="status">A consultar pedidos, stock e localização…</div> : <>
+      <section className="supplier-kpi-grid" aria-label="Indicadores operacionais">
+        <article><span className="supplier-kpi-icon">↔</span><small>Pedidos activos</small><strong>{metrics.activeOrders}</strong><span>De {metrics.totalOrders} pedidos recebidos</span></article>
+        <article><span className="supplier-kpi-icon">✓</span><small>Pedidos concluídos</small><strong>{metrics.completedOrders}</strong><span>Estado final comunicado pela API</span></article>
+        <article><span className="supplier-kpi-icon">▤</span><small>Stock disponível</small><strong>{metrics.available}</strong><span>{metrics.reserved} unidades reservadas</span></article>
+        <article className={metrics.lowStock.length ? 'alert-kpi' : ''}><span className="supplier-kpi-icon">!</span><small>Alertas de stock</small><strong>{metrics.lowStock.length}</strong><span>Itens no nível mínimo ou abaixo</span></article>
       </section>
-      <section className="workspace-panel"><div className="panel-title"><div><span className="section-kicker">Módulos</span><h2>Gestão do negócio</h2></div></div><div className="module-card-grid"><Link to="/fornecedor/stock" className="module-card"><span>ERP</span><strong>Stock</strong><small>Disponível e reservado, com níveis mínimos.</small>→</Link><Link to="/fornecedor/pedidos" className="module-card"><span>ERP</span><strong>Pedidos e entregas</strong><small>Ciclo operacional do pedido.</small>→</Link><Link to="/fornecedor/lotes" className="module-card"><span>ERP</span><strong>Lotes de produção</strong><small>Interface preparada; depende do endpoint de lotes.</small>→</Link><Link to="/fornecedor/financeiro" className="module-card"><span>ERP</span><strong>Financeiro</strong><small>Receita de pedidos disponível; faturação completa depende da API.</small>→</Link><Link to="/fornecedor/clientes" className="module-card"><span>CRM</span><strong>Clientes</strong><small>Perfil e histórico de compras.</small>→</Link><Link to="/fornecedor/interacoes" className="module-card"><span>CRM</span><strong>Interações</strong><small>Notas, contactos e follow-up.</small>→</Link><Link to="/fornecedor/segmentacao" className="module-card"><span>CRM</span><strong>Segmentação</strong><small>Novos, frequentes e inativos.</small>→</Link><Link to="/fornecedor/relatorios" className="module-card"><span>CRM</span><strong>Relatórios</strong><small>Desempenho e fidelização.</small>→</Link></div></section>
+      <div className="supplier-dashboard-grid">
+        <section className="workspace-panel"><div className="panel-title"><div><span className="section-kicker">PEDIDOS</span><h2>Actividade recente</h2></div><Link className="text-link" to="/fornecedor/pedidos">Ver todos →</Link></div>
+          {orders.length ? <div className="supplier-live-list">{orders.slice(0, 6).map((order) => <Link className="dashboard-list-row" to={`/fornecedor/pedido/${encodeURIComponent(order.id)}`} key={order.id}><span><strong>{order.reference}</strong><small>{new Date(order.createdAt).toLocaleString('pt-AO')} · {statusLabel[order.status] ?? order.status}</small></span><strong>{formatAOA(order.pricing?.total ?? 0)}</strong></Link>)}</div> : <div className="empty-state compact"><h3>Sem pedidos neste momento</h3><p>Quando a API associar pedidos a esta empresa, aparecerão aqui.</p><Link className="secondary-btn" to="/fornecedor/pedidos">Abrir pedidos</Link></div>}
+        </section>
+        <section className="workspace-panel"><div className="panel-title"><div><span className="section-kicker">INVENTÁRIO</span><h2>Stock a vigiar</h2></div><Link className="text-link" to="/fornecedor/stock">Gerir stock →</Link></div>
+          {metrics.lowStock.length ? <div className="supplier-live-list">{metrics.lowStock.slice(0, 6).map((item) => <Link className="dashboard-list-row" to="/fornecedor/stock" key={item.id}><span><strong>{item.variant.name}</strong><small>{item.variant.sku} · mínimo {item.reorderLevel}</small></span><strong className="stock-warning-value">{item.availableQty}</strong></Link>)}</div> : <div className="empty-state compact"><h3>Sem alertas de stock</h3><p>Não há itens abaixo do nível mínimo devolvidos pela API.</p></div>}
+        </section>
+      </div>
+      <section className="workspace-panel supplier-location-summary"><div className="supplier-location-icon">⌖</div><div className="supplier-location-summary-copy"><span className="section-kicker">LOCALIZAÇÃO OPERACIONAL</span><h2>{location?.latitude != null && location.longitude != null ? 'Localização da empresa configurada' : 'Configure a localização da empresa'}</h2><p>{location?.latitude != null && location.longitude != null ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)} · usada para localizar stock e calcular a empresa candidata` : 'Ainda não há coordenadas guardadas. A localização correcta é necessária para receber pedidos da zona.'}</p></div><Link className="primary-btn" to="/fornecedor/localizacao">{location?.latitude != null && location.longitude != null ? 'Rever mapa' : 'Definir localização'}</Link></section>
+      <section className="workspace-panel"><div className="panel-title"><div><span className="section-kicker">ACESSO RÁPIDO</span><h2>Gestão da empresa</h2></div></div><div className="module-card-grid"><Link to="/fornecedor/stock" className="module-card"><span>ERP</span><strong>Stock</strong><small>Disponibilidade, reservado e nível mínimo.</small>→</Link><Link to="/fornecedor/pedidos" className="module-card"><span>ERP</span><strong>Pedidos</strong><small>Confirme, prepare e encaminhe pedidos.</small>→</Link><Link to="/fornecedor/perfil" className="module-card"><span>CONTA</span><strong>Perfil comercial</strong><small>Estado da conta e limites do cadastro actual.</small>→</Link><Link to="/empresa/documentos" className="module-card"><span>CONFORMIDADE</span><strong>Documentos</strong><small>Consulte documentos e pedidos de revisão.</small>→</Link><Link to="/empresa/horarios" className="module-card"><span>OPERAÇÃO</span><strong>Horários</strong><small>Configure os sete dias da semana.</small>→</Link><Link to="/fornecedor/relatorios" className="module-card"><span>ANÁLISE</span><strong>Desempenho</strong><small>Resumo derivado dos pedidos disponíveis na API.</small>→</Link></div></section>
     </>}
   </div>;
 }

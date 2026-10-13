@@ -6,6 +6,7 @@ class CreateVariantDto {
   @IsString() name!: string;
   @Type(() => Number) @IsInt() @Min(1) weightKg!: number;
   @Type(() => Number) @IsInt() @Min(0) unitPrice!: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) cylinderPrice?: number;
   @IsOptional() @IsBoolean() active?: boolean;
 }
 

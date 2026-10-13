@@ -11,7 +11,7 @@ import { DriverActionDto } from '../dto/driver-action.dto';
 
 @Controller('drivers/me/deliveries')
 @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-@Roles(Role.DRIVER)
+@Roles(Role.DRIVER, Role.PRESTADOR)
 export class DeliveriesController {
   constructor(private readonly deliveries: DeliveryService) {}
 

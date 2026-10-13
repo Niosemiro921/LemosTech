@@ -8,7 +8,9 @@ import {
   UserRole,
 } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import { MapsService } from '../../maps/maps.service';
 import { DriverFinanceService } from '../../driver-finance/application/driver-finance.service';
+import { RealtimeService } from '../../realtime/realtime.service';
 
 interface CandidateDriver {
   id: string;
@@ -22,6 +24,11 @@ interface CandidateDriver {
   acceptanceRate: number;
   distanceKm: number;
   balance: number;
+  reservedBalance: number;
+  minimumOperatingBalance: number;
+  priorityScore: number;
+  priorityBand: string;
+  continuity: boolean;
 }
 
 @Injectable()
@@ -29,6 +36,8 @@ export class DispatchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly driverFinance: DriverFinanceService,
+    private readonly realtime: RealtimeService,
+    private readonly mapsService: MapsService,
   ) {}
 
   async startForOrder(orderId: string, maxOffers = 3, actorUserId?: string, actorRole?: UserRole) {
@@ -88,7 +97,7 @@ export class DispatchService {
     }
 
     const totalWeightKg = order.items.reduce((sum, item) => sum + item.weightKg * item.quantity, 0);
-    const candidates = await this.findCandidates(order.supplier.latitude!, order.supplier.longitude!, totalWeightKg);
+    const candidates = await this.findCandidates(order.supplier.latitude!, order.supplier.longitude!, totalWeightKg, order.customerId);
     if (!candidates.length) {
       return {
         orderId: order.id,
@@ -121,13 +130,12 @@ export class DispatchService {
     const created = await this.prisma.$transaction(async (tx) => {
       const offers: Array<Record<string, unknown>> = [];
       for (const driver of freshCandidates) {
-        const pickupDistanceKm = this.haversine(
-          order.supplier!.latitude!,
-          order.supplier!.longitude!,
-          driver.latitude,
-          driver.longitude,
+        const route = await this.mapsService.calculateRoute(
+          { lat: order.supplier!.latitude!, lng: order.supplier!.longitude! },
+          { lat: driver.latitude, lng: driver.longitude },
         );
-        const estimatedPickupMinutes = this.estimatePickupMinutes(pickupDistanceKm);
+        const pickupDistanceKm = route.distance / 1000;
+        const estimatedPickupMinutes = Math.ceil(route.duration / 60);
 
         try {
           const offer = await tx.driverOffer.create({
@@ -223,6 +231,7 @@ export class DispatchService {
             order.supplier.latitude,
             order.supplier.longitude,
             order.items.reduce((total, item) => total + item.weightKg * item.quantity, 0),
+            order.customerId,
           )
         : [];
       const recommended = candidates[0];
@@ -245,8 +254,11 @@ export class DispatchService {
           ? {
               id: recommended.id,
               name: recommended.fullName,
-              priorityScore: Number((-this.scoreCandidate(recommended)).toFixed(2)),
+              priorityScore: recommended.priorityScore,
+              priorityBand: recommended.priorityBand,
               balance: recommended.balance,
+              availableBalance: recommended.balance - recommended.reservedBalance,
+              continuity: recommended.continuity,
               distanceKm: Number(recommended.distanceKm.toFixed(2)),
             }
           : null,
@@ -364,11 +376,8 @@ export class DispatchService {
   async startDriver(userId: string, latitude: number, longitude: number) {
     const driver = await this.getDriver(userId);
     await this.driverFinance.assertOperatingBalance(userId);
-    return this.prisma.driverProfile.update({
-      where: { id: driver.id },
-      data: { isOnline: true, latitude, longitude, lastLocationAt: new Date() },
-      select: { id: true, fullName: true, isOnline: true, latitude: true, longitude: true, lastLocationAt: true },
-    });
+    const updated = await this.prisma.driverProfile.update({ where: { id: driver.id }, data: { isOnline: true, latitude, longitude, lastLocationAt: new Date() }, select: { id: true, fullName: true, vehicleType: true, isOnline: true, latitude: true, longitude: true, lastLocationAt: true } });
+    return updated;
   }
 
   async stopDriver(userId: string) {
@@ -382,11 +391,11 @@ export class DispatchService {
 
   async updateDriverLocation(userId: string, latitude: number, longitude: number) {
     const driver = await this.getDriver(userId);
-    return this.prisma.driverProfile.update({
-      where: { id: driver.id },
-      data: { latitude, longitude, lastLocationAt: new Date() },
-      select: { id: true, fullName: true, isOnline: true, latitude: true, longitude: true, lastLocationAt: true },
-    });
+    if (!driver.isOnline) throw new ConflictException('Ative o modo online antes de enviar localização.');
+    const updated = await this.prisma.driverProfile.update({ where: { id: driver.id }, data: { latitude, longitude, lastLocationAt: new Date() }, select: { id: true, fullName: true, vehicleType: true, isOnline: true, latitude: true, longitude: true, lastLocationAt: true } });
+    const activeDelivery = await this.prisma.delivery.findFirst({ where: { driverId: driver.id, status: { in: [PrismaDeliveryStatus.ASSIGNED, PrismaDeliveryStatus.TO_PICKUP, PrismaDeliveryStatus.AT_PICKUP, PrismaDeliveryStatus.PICKED_UP, PrismaDeliveryStatus.IN_TRANSIT, PrismaDeliveryStatus.ARRIVED] } }, select: { orderId: true } });
+    if (activeDelivery) this.realtime.emitOrderLocation(activeDelivery.orderId, { latitude, longitude, lastLocationAt: updated.lastLocationAt, driverId: driver.id });
+    return updated;
   }
 
   async getCustomerTracking(userId: string, orderId: string) {
@@ -441,74 +450,62 @@ export class DispatchService {
   private async getDriver(userId: string) {
     const driver = await this.prisma.driverProfile.findUnique({ where: { userId }, include: { user: true } });
     if (!driver) throw new NotFoundException('Perfil de entregador não encontrado.');
-    if (driver.user.status !== AccountStatus.ACTIVE || driver.user.role !== UserRole.DRIVER) {
+    if (driver.user.status !== AccountStatus.ACTIVE || !([UserRole.DRIVER, UserRole.PRESTADOR] as UserRole[]).includes(driver.user.role)) {
       throw new ConflictException('O entregador ainda não está autorizado a operar.');
     }
     return driver;
   }
 
-  private async findCandidates(latitude: number, longitude: number, totalWeightKg: number): Promise<CandidateDriver[]> {
-    const minimumBalance = Number(process.env.MINIMUM_DRIVER_OPERATING_BALANCE ?? '10000');
+  private async findCandidates(latitude: number, longitude: number, totalWeightKg: number, customerId?: string): Promise<CandidateDriver[]> {
+    const minimumBalance = this.minimumOperatingBalance();
     const drivers = await this.prisma.driverProfile.findMany({
       where: {
-        isOnline: true,
-        latitude: { not: null },
-        longitude: { not: null },
+        isOnline: true, latitude: { not: null }, longitude: { not: null },
         vehicleCapacityKg: { gte: totalWeightKg },
-        user: { status: AccountStatus.ACTIVE, role: UserRole.DRIVER },
-        wallet: { is: { balance: { gte: Number.isSafeInteger(minimumBalance) && minimumBalance >= 0 ? minimumBalance : 10000 } } },
-        deliveries: {
-          none: {
-            status: {
-              in: [
-                PrismaDeliveryStatus.ASSIGNED,
-                PrismaDeliveryStatus.TO_PICKUP,
-                PrismaDeliveryStatus.AT_PICKUP,
-                PrismaDeliveryStatus.PICKED_UP,
-                PrismaDeliveryStatus.IN_TRANSIT,
-                PrismaDeliveryStatus.ARRIVED,
-              ],
-            },
-          },
-        },
+        user: { status: AccountStatus.ACTIVE, role: { in: [UserRole.DRIVER, UserRole.PRESTADOR] } },
+        wallet: { is: { balance: { gte: minimumBalance } } },
+        deliveries: { none: { status: { in: [PrismaDeliveryStatus.ASSIGNED, PrismaDeliveryStatus.TO_PICKUP, PrismaDeliveryStatus.AT_PICKUP, PrismaDeliveryStatus.PICKED_UP, PrismaDeliveryStatus.IN_TRANSIT, PrismaDeliveryStatus.ARRIVED] } } },
       },
-      orderBy: [{ ratingAverage: 'desc' }, { acceptanceRate: 'desc' }],
-      include: { wallet: { select: { balance: true } } },
+      include: { wallet: { select: { balance: true, reservedBalance: true, minimumOperatingBalance: true } } },
       take: 100,
     });
-
+    const lastByDriver = new Map<string, Date>();
+    if (customerId && drivers.length) {
+      const rows = await this.prisma.delivery.findMany({ where: { driverId: { in: drivers.map((d) => d.id) }, status: PrismaDeliveryStatus.DELIVERED, order: { customerId } }, orderBy: { deliveredAt: 'desc' }, select: { driverId: true, deliveredAt: true, createdAt: true } });
+      for (const row of rows) if (!lastByDriver.has(row.driverId)) lastByDriver.set(row.driverId, row.deliveredAt ?? row.createdAt);
+    }
     const radius = this.dispatchRadiusKm();
-    return drivers
-      .map((driver) => {
-        const distanceKm = this.haversine(
-          latitude,
-          longitude,
-          driver.latitude as number,
-          driver.longitude as number,
-        );
-        return {
-          id: driver.id,
-          userId: driver.userId,
-          fullName: driver.fullName,
-          vehicleType: driver.vehicleType,
-          vehicleCapacityKg: driver.vehicleCapacityKg,
-          latitude: driver.latitude as number,
-          longitude: driver.longitude as number,
-          ratingAverage: driver.ratingAverage,
-          acceptanceRate: driver.acceptanceRate,
-          distanceKm,
-          balance: driver.wallet?.balance ?? 0,
-        };
-      })
-      .filter((driver) => driver.distanceKm <= radius)
-      .sort((a, b) => this.scoreCandidate(a) - this.scoreCandidate(b));
+    return drivers.map((driver) => {
+      const distanceKm = this.haversine(latitude, longitude, driver.latitude as number, driver.longitude as number);
+      const balance = driver.wallet?.balance ?? 0;
+      const reservedBalance = driver.wallet?.reservedBalance ?? 0;
+      const available = balance - reservedBalance;
+      const continuity = lastByDriver.has(driver.id);
+      const priorityScore = this.priorityScore(available, distanceKm, driver.acceptanceRate, driver.ratingAverage, continuity);
+      return {
+        id: driver.id, userId: driver.userId, fullName: driver.fullName, vehicleType: driver.vehicleType, vehicleCapacityKg: driver.vehicleCapacityKg, latitude: driver.latitude as number, longitude: driver.longitude as number, ratingAverage: driver.ratingAverage, acceptanceRate: driver.acceptanceRate, distanceKm, balance, reservedBalance, minimumOperatingBalance: driver.wallet?.minimumOperatingBalance ?? minimumBalance, priorityScore, priorityBand: this.priorityBand(available), continuity,
+      };
+    }).filter((driver) => driver.distanceKm <= radius && driver.balance - driver.reservedBalance >= driver.minimumOperatingBalance)
+      .sort((a, b) => b.priorityScore - a.priorityScore || a.distanceKm - b.distanceKm);
   }
 
-  private scoreCandidate(driver: CandidateDriver) {
-    const distancePenalty = driver.distanceKm * 10;
-    const reliabilityBonus = driver.acceptanceRate * 2 + driver.ratingAverage;
-    return distancePenalty - reliabilityBonus;
+  private priorityScore(balance: number, distanceKm: number, acceptanceRate: number, rating: number, continuity: boolean) {
+    const elite = Math.max(this.minimumOperatingBalance() * 10, 1);
+    const balanceScore = Math.min(100, (balance / elite) * 100);
+    const distanceScore = Math.max(0, 100 - (distanceKm / this.dispatchRadiusKm()) * 100);
+    const reliabilityScore = Math.max(0, Math.min(100, acceptanceRate * 60 + (rating / 5) * 40));
+    return Number((balanceScore * 0.35 + distanceScore * 0.30 + reliabilityScore * 0.20 + (continuity ? 15 : 0)).toFixed(2));
   }
+
+  private priorityBand(balance: number) {
+    const base = this.minimumOperatingBalance();
+    if (balance >= base * 10) return 'ELITE';
+    if (balance >= base * 5) return 'PRIORITY';
+    if (balance >= base * 2.5) return 'PLUS';
+    return 'STANDARD';
+  }
+
+  private minimumOperatingBalance() { const value = Number(process.env.MINIMUM_DRIVER_OPERATING_BALANCE ?? '10000'); return Number.isSafeInteger(value) && value >= 0 ? value : 10000; }
 
   private async expireOffers(driverId: string) {
     await this.prisma.driverOffer.updateMany({

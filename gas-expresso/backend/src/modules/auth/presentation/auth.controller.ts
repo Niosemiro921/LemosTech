@@ -5,6 +5,7 @@ import { LoginDto } from '../application/dto/login.dto';
 import { RegisterCustomerDto } from '../application/dto/register-customer.dto';
 import { RegisterDriverDto } from '../application/dto/register-driver.dto';
 import { RegisterSupplierDto } from '../application/dto/register-supplier.dto';
+import { RegisterPrestadorDto } from '../application/dto/register-prestador.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { ActiveAccountGuard } from '../guards/active-account.guard';
 import { RolesGuard } from '../guards/roles.guard';
@@ -31,13 +32,24 @@ export class AuthController {
     return this.auth.registerSupplier(dto);
   }
 
+  @Post('register/prestador')
+  registerPrestador(@Body() dto: RegisterPrestadorDto) {
+    return this.auth.registerPrestador(dto);
+  }
+
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
   }
 
+  @Post('logout')
   @UseGuards(JwtAuthGuard)
+  logout(@Req() req: Request & { user: { sub: string; jti?: string; exp?: number } }) {
+    return this.auth.logout(req.user.sub, req.user.jti, req.user.exp);
+  }
+
   @Get('me')
+  @UseGuards(JwtAuthGuard)
   me(@Req() req: Request & { user: { sub: string } }) {
     return this.auth.me(req.user.sub);
   }

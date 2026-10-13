@@ -87,25 +87,25 @@ export class OperationsController {
   }
 
   @Get('incidents/mine')
-  @Roles(Role.DRIVER, Role.SUPPLIER)
+  @Roles(Role.DRIVER, Role.PRESTADOR, Role.SUPPLIER)
   listIncidents(@Req() req: AuthenticatedRequest) {
     return this.operations.listIncidents(req.user.sub);
   }
 
   @Post('incidents')
-  @Roles(Role.DRIVER, Role.SUPPLIER)
+  @Roles(Role.DRIVER, Role.PRESTADOR, Role.SUPPLIER)
   createIncident(@Req() req: AuthenticatedRequest, @Body() dto: CreateIncidentDto) {
     return this.operations.createIncident(req.user.sub, dto);
   }
 
   @Get('drivers/me/documents')
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   listDriverDocuments(@Req() req: AuthenticatedRequest) {
     return this.operations.listDocuments(req.user.sub, Role.DRIVER);
   }
 
   @Post('drivers/me/documents/:id/review')
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   requestDriverDocumentReview(@Req() req: AuthenticatedRequest, @Param('id', new ParseUUIDPipe()) id: string) {
     return this.operations.requestDocumentReview(req.user.sub, Role.DRIVER, id);
   }

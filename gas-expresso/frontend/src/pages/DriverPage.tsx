@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { RealMap } from '../components/RealMap';
-import { extractMessage } from '../services/auth';
+import { extractMessage, getCurrentUser } from '../services/auth';
 import { formatAOA } from '../services/catalog';
 import {
   acceptDriverOffer,
@@ -22,7 +22,6 @@ import { fetchDriverWallet, type DriverWallet } from '../services/driverFinance'
 
 const OFFER_REFRESH_MS = 10_000;
 const WALLET_REFRESH_MS = 15_000;
-const EARNINGS_REFRESH_MS = 60_000;
 const LOCATION_THROTTLE_MS = 8_000;
 
 function isSameCalendarDay(value: string, date: Date) {
@@ -42,46 +41,46 @@ function isWithinCurrentWeek(value: string, date: Date) {
 
 export default function DriverPage() {
   const navigate = useNavigate();
+  const base = getCurrentUser()?.role === 'PRESTADOR' ? '/prestador' : '/driver';
   const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [offers, setOffers] = useState<DriverOffer[]>([]);
   const [delivery, setDelivery] = useState<DriverDelivery | null>(null);
-  const [earnings, setEarnings] = useState<DriverEarning[] | null>(null);
+  const [earnings, setEarnings] = useState<DriverEarning[]>([]);
   const [wallet, setWallet] = useState<DriverWallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [earningsError, setEarningsError] = useState('');
   const [locationError, setLocationError] = useState('');
   const [livePoint, setLivePoint] = useState<{ lat: number; lng: number } | null>(null);
   const lastLocationSentAtRef = useRef(0);
 
   const radiusRaw = Number(import.meta.env.VITE_DRIVER_OFFER_RADIUS_KM);
   const radiusKm = Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : null;
+  const now = new Date();
+
   const nearbyOffers = useMemo(() => {
     const sorted = [...offers].sort((a, b) => a.distanceToPickupKm - b.distanceToPickupKm);
     return radiusKm == null ? sorted : sorted.filter(item => item.distanceToPickupKm <= radiusKm);
   }, [offers, radiusKm]);
 
-  const todayNet = useMemo(() => {
-    const today = new Date();
-    return earnings?.filter(item => isSameCalendarDay(item.createdAt, today)).reduce((sum, item) => sum + item.net, 0) ?? null;
-  }, [earnings]);
-  const weekNet = useMemo(() => {
-    const now = new Date();
-    return earnings?.filter(item => isWithinCurrentWeek(item.createdAt, now)).reduce((sum, item) => sum + item.net, 0) ?? null;
-  }, [earnings]);
+  const todayNet = useMemo(() => earnings.filter(item => isSameCalendarDay(item.createdAt, now)).reduce((sum, item) => sum + item.net, 0), [earnings, now]);
+  const weekNet = useMemo(() => earnings.filter(item => isWithinCurrentWeek(item.createdAt, now)).reduce((sum, item) => sum + item.net, 0), [earnings, now]);
 
   const refresh = useCallback(async (showLoader = false) => {
     if (showLoader) setLoading(true);
+    setProfileLoading(true);
     try {
-      const [driverProfile, currentDelivery, driverWallet] = await Promise.all([
+      const [driverProfile, currentDelivery, driverWallet, driverEarnings] = await Promise.all([
         fetchDriverProfile(),
         fetchCurrentDelivery(),
         fetchDriverWallet(),
+        fetchDriverEarnings(),
       ]);
       setProfile(driverProfile);
       setDelivery(currentDelivery);
       setWallet(driverWallet);
+      setEarnings(driverEarnings);
       if (driverProfile.isOnline) {
         try { setOffers(await fetchDriverOffers()); } catch { setOffers([]); }
       } else {
@@ -92,22 +91,12 @@ export default function DriverPage() {
       setError(extractMessage(cause, 'Não foi possível carregar a operação do entregador.'));
     } finally {
       if (showLoader) setLoading(false);
-    }
-  }, []);
-
-  const refreshEarnings = useCallback(async () => {
-    try {
-      setEarnings(await fetchDriverEarnings());
-      setEarningsError('');
-    } catch (cause) {
-      setEarnings(null);
-      setEarningsError(extractMessage(cause, 'Não foi possível carregar os ganhos acumulados.'));
+      setProfileLoading(false);
     }
   }, []);
 
   useEffect(() => { void refresh(true); const timer = window.setInterval(() => void refresh(false), OFFER_REFRESH_MS); return () => window.clearInterval(timer); }, [refresh]);
   useEffect(() => { const timer = window.setInterval(() => { void fetchDriverWallet().then(setWallet).catch(() => undefined); }, WALLET_REFRESH_MS); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { void refreshEarnings(); const timer = window.setInterval(() => void refreshEarnings(), EARNINGS_REFRESH_MS); return () => window.clearInterval(timer); }, [refreshEarnings]);
 
   useEffect(() => {
     if (!profile?.isOnline) return;
@@ -131,7 +120,7 @@ export default function DriverPage() {
   }, [profile?.isOnline]);
 
   const toggleOnline = async () => {
-    if (!profile) return;
+    if (profileLoading || !profile) return;
     setBusy(true); setError(''); setLocationError('');
     try {
       if (profile.isOnline) {
@@ -157,7 +146,7 @@ export default function DriverPage() {
     try {
       if (accept) {
         const result = await acceptDriverOffer(offer.id);
-        navigate(`/driver/pedido/${encodeURIComponent(result.deliveryId)}`);
+        navigate(`${base}/pedido/${encodeURIComponent(result.deliveryId)}`);
       } else {
         await rejectDriverOffer(offer.id);
         await refresh(false);
@@ -176,28 +165,27 @@ export default function DriverPage() {
   return <div className="page workspace-page driver-page driver-mobile-first">
     <div className="driver-topbar">
       <div><span className="section-kicker">Painel do entregador</span><h1>{profile ? `Olá, ${profile.fullName}.` : 'Operação de entregas'}</h1><p>{radiusKm != null ? `As ofertas são ordenadas por proximidade dentro do raio operacional configurado.` : 'As ofertas e entregas são sincronizadas diretamente com a API.'}</p></div>
-      <button className={`online-toggle ${profile?.isOnline ? 'online' : ''}`} onClick={() => void toggleOnline()} disabled={!profile || busy}><span className="status-dot" /> {profile?.isOnline ? 'Ficar offline' : 'Ficar online'}</button>
+      <button className={`online-toggle ${profile?.isOnline ? 'online' : ''}`} onClick={() => void toggleOnline()} disabled={!profile || busy || profileLoading}><span className="status-dot" /> {profile?.isOnline ? 'Ficar offline' : profileLoading ? 'Carregando...' : 'Ficar online'}</button>
     </div>
     {error && <div className="form-error" role="alert">{error}</div>}
-    {locationError && <div className="location-warning" role="alert"><strong>Localização necessária</strong><span>{locationError}</span><Link to="/driver/perfil">Ver permissões e perfil →</Link></div>}
+    {locationError && <div className="location-warning" role="alert"><strong>Localização necessária</strong><span>{locationError}</span><Link to={`${base}/perfil`}>Ver permissões e perfil →</Link></div>}
 
-    {earningsError && <div className="form-error" role="alert">{earningsError}</div>}
-    <section className="driver-earnings-strip" aria-label="Resumo financeiro"><article><span>Ganhos acumulados hoje</span><strong>{todayNet == null ? '—' : formatAOA(todayNet)}</strong><small>90% das taxas de entrega concluídas</small></article><article><span>Ganhos acumulados esta semana</span><strong>{weekNet == null ? '—' : formatAOA(weekNet)}</strong><small>Valores acumulados, não levantados</small></article><article><span>Saldo operacional</span><strong>{wallet ? formatAOA(wallet.availableBalance) : '—'}</strong><small>{wallet ? `Prioridade ${wallet.priorityScore} · ${wallet.priorityBand}` : 'A aguardar saldo'}</small></article></section>
+    <section className="driver-earnings-strip" aria-label="Ganhos do período"><article><span>Hoje</span><strong>{formatAOA(todayNet)}</strong><small>líquido recebido pela API</small></article><article><span>Esta semana</span><strong>{formatAOA(weekNet)}</strong><small>líquido recebido pela API</small></article><article><span>Saldo operacional</span><strong>{wallet ? formatAOA(wallet.availableBalance) : '—'}</strong><small>{wallet ? `Prioridade ${wallet.priorityScore} · ${wallet.priorityBand}` : 'A aguardar saldo'}</small></article></section>
 
     <div className="driver-layout">
       <section className="driver-map-panel">
-        <div className="driver-card-head"><div><span className="section-kicker">Mapa operacional</span><h2>{delivery ? delivery.order.reference : profile?.isOnline ? 'A aguardar pedidos' : 'Você está offline'}</h2><p>{delivery ? `${delivery.status} · acompanhe a rota actual.` : profile?.isOnline ? 'A sua posição é enviada ao servidor somente enquanto estiver online.' : 'Fique online para ativar a operação.'}</p></div><Link className="secondary-btn" to="/driver/pedidos">Pedidos ({nearbyOffers.length})</Link></div>
+        <div className="driver-card-head"><div><span className="section-kicker">Mapa operacional</span><h2>{delivery ? delivery.order.reference : profile?.isOnline ? 'A aguardar pedidos' : 'Você está offline'}</h2><p>{delivery ? `${delivery.status} · acompanhe a rota actual.` : profile?.isOnline ? 'A sua posição é enviada ao servidor somente enquanto estiver online.' : 'Fique online para ativar a operação.'}</p></div><Link className="secondary-btn" to={`${base}/pedidos`}>Pedidos ({nearbyOffers.length})</Link></div>
         <div className="driver-map-wrap driver-map-central"><RealMap value={mapPoint} markerLabel={delivery && !ownPoint ? 'Destino da entrega' : 'Entregador'} interactive={false} /><div className="driver-map-overlay"><strong>{profile?.isOnline ? 'Online' : 'Offline'}</strong><span>{ownPoint ? 'GPS sincronizado' : 'Aguardando localização'}</span></div></div>
-        {delivery && <div className="driver-current-delivery"><div><span className="section-kicker">Entrega actual</span><strong>{delivery.order.reference}</strong><p>{delivery.order.items.map(item => `${item.quantity} × ${item.variantName}`).join(', ')}</p><small>{delivery.dropoff.address}</small></div><Link className="primary-btn" to={`/driver/pedido/${encodeURIComponent(delivery.id)}`}>Abrir entrega →</Link></div>}
+        {delivery && <div className="driver-current-delivery"><div><span className="section-kicker">Entrega actual</span><strong>{delivery.order.reference}</strong><p>{delivery.order.items.map(item => `${item.quantity} × ${item.variantName}`).join(', ')}</p><small>{delivery.dropoff.address}</small></div><Link className="primary-btn" to={`${base}/pedido/${encodeURIComponent(delivery.id)}`}>Abrir entrega →</Link></div>}
       </section>
 
       <aside className="driver-offers-sheet">
         <div className="driver-sheet-handle" aria-hidden="true" />
         <div className="driver-sheet-head"><div><span className="section-kicker">Disponíveis agora</span><h2>Pedidos próximos</h2></div><span className="driver-offer-count">{nearbyOffers.length}</span></div>
-        {profile?.isOnline ? nearbyOffers.length ? <div className="driver-offer-list">{nearbyOffers.map(offer => <article className="driver-offer-card" key={offer.id}><div className="driver-offer-top"><span className="offer-distance">{offer.distanceToPickupKm.toFixed(1)} km</span><span className="offer-expiry">Até {new Date(offer.expiresAt).toLocaleTimeString('pt-AO')}</span></div><div className="driver-offer-main"><div><strong>{offer.order.reference}</strong><p>{offer.order.items.map(item => `${item.quantity} × ${item.variantName}`).join(', ')}</p><small>Recolha: {offer.order.supplier?.tradeName ?? 'Empresa'} · {offer.estimatedPickupMinutes} min estimados</small><small>Entrega: {offer.order.deliveryAddress}</small></div><strong>{formatAOA(offer.order.pricing.total)}</strong></div><div className="driver-offer-actions"><button className="secondary-btn" onClick={() => void answerOffer(offer, false)} disabled={busy}>Recusar</button><button className="primary-btn" onClick={() => void answerOffer(offer, true)} disabled={busy}>{busy ? 'A processar…' : 'Aceitar'}</button></div></article>)}</div> : <div className="empty-state"><h3>Nenhum pedido próximo</h3><p>O servidor não devolveu ofertas elegíveis neste momento.</p><Link className="secondary-btn" to="/driver/pedidos">Abrir pedidos</Link></div> : <div className="empty-state"><h3>Você está offline</h3><p>Ative o estado online depois de autorizar o acesso à localização.</p><button className="primary-btn" onClick={() => void toggleOnline()} disabled={busy}>Ficar online</button></div>}
+        {profile?.isOnline ? nearbyOffers.length ? <div className="driver-offer-list">{nearbyOffers.map(offer => <article className="driver-offer-card" key={offer.id}><div className="driver-offer-top"><span className="offer-distance">{offer.distanceToPickupKm.toFixed(1)} km</span><span className="offer-expiry">Até {new Date(offer.expiresAt).toLocaleTimeString('pt-AO')}</span></div><div className="driver-offer-main"><div><strong>{offer.order.reference}</strong><p>{offer.order.items.map(item => `${item.quantity} × ${item.variantName}`).join(', ')}</p><small>Recolha: {offer.order.supplier?.tradeName ?? 'Empresa'} · {offer.estimatedPickupMinutes} min estimados</small><small>Entrega: {offer.order.deliveryAddress}</small><small>Ganhos brutos da entrega: {formatAOA(offer.order.pricing.deliveryFee ?? 0)}</small></div><strong>{formatAOA(offer.order.pricing.deliveryFee ?? 0)}</strong></div><div className="driver-offer-actions"><button className="secondary-btn" onClick={() => void answerOffer(offer, false)} disabled={busy}>Recusar</button><button className="primary-btn" onClick={() => void answerOffer(offer, true)} disabled={busy}>{busy ? 'A processar…' : 'Aceitar'}</button></div></article>)}</div> : <div className="empty-state"><h3>Nenhum pedido próximo</h3><p>O servidor não devolveu ofertas elegíveis neste momento.</p><Link className="secondary-btn" to={`${base}/pedidos`}>Abrir pedidos</Link></div> : <div className="empty-state"><h3>Você está offline</h3><p>Ative o estado online depois de autorizar o acesso à localização.</p><button className="primary-btn" onClick={() => void toggleOnline()} disabled={busy}>Ficar online</button></div>}
       </aside>
     </div>
 
-    <div className="driver-tools-card"><Link className="driver-tool-link" to="/driver/saldo"><strong>Carteira</strong><span>{wallet ? `${formatAOA(wallet.availableBalance)} disponíveis · prioridade ${wallet.priorityScore}` : 'Consultar saldo operacional'} →</span></Link><Link className="driver-tool-link" to="/driver/ganhos"><strong>Histórico</strong><span>Ver valores acumulados nas entregas concluídas →</span></Link><Link className="driver-tool-link" to="/driver/documentos"><strong>Documentos</strong><span>Estado documental da conta →</span></Link><Link className="driver-tool-link" to="/driver/incidentes"><strong>Incidentes</strong><span>Registar uma ocorrência operacional ou de segurança →</span></Link></div>
+    <div className="driver-tools-card"><Link className="driver-tool-link" to={`${base}/saldo`}><strong>Carteira</strong><span>{wallet ? `${formatAOA(wallet.availableBalance)} disponíveis · prioridade ${wallet.priorityScore}` : 'Consultar saldo operacional'} →</span></Link><Link className="driver-tool-link" to={`${base}/ganhos`}><strong>Histórico</strong><span>Ganhos do dia, semana e por entrega →</span></Link><Link className="driver-tool-link" to={`${base}/documentos`}><strong>Documentos</strong><span>Estado documental da conta →</span></Link><Link className="driver-tool-link" to={`${base}/incidentes`}><strong>Incidentes</strong><span>Registar uma ocorrência operacional ou de segurança →</span></Link></div>
   </div>;
 }

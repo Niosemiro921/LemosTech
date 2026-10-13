@@ -150,7 +150,7 @@ export class OperationsService {
   async createIncident(userId: string, dto: CreateIncidentDto) {
     const user = await this.requirePartner(userId);
     if (dto.orderId) {
-      const orderWhere = user.role === UserRole.DRIVER
+      const orderWhere = ([UserRole.DRIVER, UserRole.PRESTADOR] as UserRole[]).includes(user.role)
         ? {
             id: dto.orderId,
             OR: [
@@ -177,12 +177,12 @@ export class OperationsService {
   }
 
   async listDocuments(userId: string, role: Role) {
-    await this.requireRole(userId, role === Role.DRIVER ? UserRole.DRIVER : UserRole.SUPPLIER);
+    await this.requireRole(userId, role === Role.SUPPLIER ? UserRole.SUPPLIER : UserRole.DRIVER);
     return this.prisma.businessDocument.findMany({ where: { userId }, orderBy: { uploadedAt: 'desc' } });
   }
 
   async requestDocumentReview(userId: string, role: Role, documentId: string) {
-    await this.requireRole(userId, role === Role.DRIVER ? UserRole.DRIVER : UserRole.SUPPLIER);
+    await this.requireRole(userId, role === Role.SUPPLIER ? UserRole.SUPPLIER : UserRole.DRIVER);
     const document = await this.prisma.businessDocument.findFirst({ where: { id: documentId, userId } });
     if (!document) throw new NotFoundException('Documento não encontrado.');
     if (document.status !== 'REJECTED') {
@@ -313,7 +313,7 @@ export class OperationsService {
 
   private async requirePartner(userId: string) {
     const user = await this.requireAccount(userId);
-    if (user.role !== UserRole.DRIVER && user.role !== UserRole.SUPPLIER) {
+    if (user.role !== UserRole.DRIVER && user.role !== UserRole.PRESTADOR && user.role !== UserRole.SUPPLIER) {
       throw new NotFoundException('Perfil de parceiro não encontrado.');
     }
     return user;

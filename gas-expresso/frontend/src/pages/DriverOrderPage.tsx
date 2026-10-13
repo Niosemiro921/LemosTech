@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { getCurrentUser } from '../services/auth';
 import { RealMap } from '../components/RealMap';
 import { formatAOA } from '../services/catalog';
 import { advanceDriverDelivery, fetchDriverDelivery, type DriverDelivery } from '../services/driver';
@@ -16,6 +17,8 @@ const nextAction: Record<string, string> = {
 
 export default function DriverOrderPage() {
   const navigate = useNavigate();
+  const role = getCurrentUser()?.role;
+  const base = role === 'PRESTADOR' ? '/prestador' : '/driver';
   const { orderId } = useParams();
   const [delivery, setDelivery] = useState<DriverDelivery | null>(null);
   const [error, setError] = useState('');
@@ -48,7 +51,7 @@ export default function DriverOrderPage() {
       }
       await advanceDriverDelivery(delivery.id, delivery.status, location);
       await refresh();
-      if (delivery.status === 'ARRIVED') navigate('/driver', { replace: true });
+      if (delivery.status === 'ARRIVED') navigate(base, { replace: true });
     } catch (cause) {
       setError(extractMessage(cause, 'Não foi possível atualizar o estado da entrega.'));
     } finally {
@@ -59,7 +62,7 @@ export default function DriverOrderPage() {
   const itemLabel = delivery?.order.items.map((item) => `${item.quantity} × ${item.variantName}`).join(', ');
   return (
     <div className="page operation-detail-page driver-order-page">
-      <div className="operation-detail-topbar"><button className="back-link" onClick={() => navigate('/driver')}>← Voltar ao painel</button><span className="section-kicker">Entrega · {delivery?.order.reference ?? orderId ?? ''}</span></div>
+      <div className="operation-detail-topbar"><button className="back-link" onClick={() => navigate(base)}>← Voltar ao painel</button><span className="section-kicker">Entrega · {delivery?.order.reference ?? orderId ?? ''}</span></div>
       {error && <div className="form-error" role="alert">{error}</div>}
       {!delivery ? <p role="status">A carregar os detalhes da entrega…</p> : <>
         <div className="driver-request-banner"><div><span className="section-kicker">Estado da entrega</span><h1>{delivery.status}</h1><p>{delivery.order.reference} · {itemLabel}</p></div></div>
@@ -70,7 +73,7 @@ export default function DriverOrderPage() {
             <div className="driver-map-wrap detail-map"><RealMap value={{ lat: delivery.dropoff.latitude, lng: delivery.dropoff.longitude }} /><div className="driver-map-overlay"><strong>Destino</strong><span>{delivery.dropoff.address}</span></div></div>
             {nextAction[delivery.status] ? <button className="primary-btn full" disabled={busy} onClick={() => void advance()}>{busy ? 'A atualizar…' : nextAction[delivery.status]} <span>→</span></button> : <p>Esta entrega não tem mais ações pendentes.</p>}
           </main>
-          <aside className="operation-side-card"><div className="section-kicker">Detalhes do pedido</div><div className="side-info-row"><span>Referência</span><strong>{delivery.order.reference}</strong></div><div className="side-info-row"><span>Produto</span><strong>{itemLabel}</strong></div><div className="side-info-row"><span>Cliente</span><strong>{delivery.dropoff.address}</strong></div><div className="side-info-row"><span>Pagamento</span><strong>Na entrega</strong></div><div className="side-divider" /><p>As alterações de estado são verificadas e registadas pelo servidor.</p><Link className="secondary-btn full" to="/driver">Painel do entregador</Link></aside>
+          <aside className="operation-side-card"><div className="section-kicker">Detalhes do pedido</div><div className="side-info-row"><span>Referência</span><strong>{delivery.order.reference}</strong></div><div className="side-info-row"><span>Produto</span><strong>{itemLabel}</strong></div><div className="side-info-row"><span>Cliente</span><strong>{delivery.dropoff.address}</strong></div><div className="side-info-row"><span>Pagamento</span><strong>Na entrega</strong></div><div className="side-divider" /><p>As alterações de estado são verificadas e registadas pelo servidor.</p><div className="driver-order-side-actions"><Link className="secondary-btn full" to={`/chat/pedido/${encodeURIComponent(delivery.order.id)}`}>💬 Conversar com cliente</Link><Link className="secondary-btn full" to={base}>Painel do entregador</Link></div></aside>
         </div>
       </>}
     </div>

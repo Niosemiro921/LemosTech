@@ -26,7 +26,7 @@ export class ProductService {
       return await this.prisma.product.create({
         data: {
           slug: dto.slug.trim().toLowerCase(), name: dto.name.trim(), description: dto.description?.trim() || null, active: dto.active ?? true,
-          variants: { create: dto.variants.map((v) => ({ sku: v.sku.trim().toUpperCase(), name: v.name.trim(), weightKg: v.weightKg, unitPrice: v.unitPrice, active: v.active ?? true })) },
+          variants: { create: dto.variants.map((v) => ({ sku: v.sku.trim().toUpperCase(), name: v.name.trim(), weightKg: v.weightKg, unitPrice: v.unitPrice, cylinderPrice: v.cylinderPrice ?? 0, active: v.active ?? true })) },
         }, include: { variants: true },
       });
     } catch (error) {
@@ -43,6 +43,6 @@ export class ProductService {
   async updateVariant(id: string, dto: UpdateVariantDto) {
     const variant = await this.prisma.productVariant.findUnique({ where: { id } });
     if (!variant) throw new NotFoundException('Variação não encontrada.');
-    return this.prisma.productVariant.update({ where: { id }, data: { ...(dto.name !== undefined ? { name: dto.name.trim() } : {}), ...(dto.unitPrice !== undefined ? { unitPrice: dto.unitPrice } : {}), ...(dto.active !== undefined ? { active: dto.active } : {}) } });
+    return this.prisma.productVariant.update({ where: { id }, data: { ...(dto.name !== undefined ? { name: dto.name.trim() } : {}), ...(dto.unitPrice !== undefined ? { unitPrice: dto.unitPrice } : {}), ...(dto.cylinderPrice !== undefined ? { cylinderPrice: dto.cylinderPrice } : {}), ...(dto.active !== undefined ? { active: dto.active } : {}) } });
   }
 }

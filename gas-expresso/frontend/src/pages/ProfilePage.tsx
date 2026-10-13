@@ -4,6 +4,8 @@ import { apiGet } from '../lib/api';
 import { extractMessage, getCurrentUser, updateCustomerProfile, type SessionUser } from '../services/auth';
 import { LogoutButton } from '../components/LogoutButton';
 import { formatAOA } from '../services/catalog';
+import { ORDER_KIND_LIST, ORDER_KIND_META, orderKindToParam } from '../services/orderKinds';
+import { normalizeOrderKind } from '../types/gas';
 
 interface CustomerOrder {
   id: string;
@@ -12,6 +14,7 @@ interface CustomerOrder {
   deliveryAddress: string;
   pricing: { total: number };
   items: Array<{ variantName: string; quantity: number }>;
+  bottleExchangeType?: string | null;
   createdAt: string;
 }
 const statusLabels: Record<string, string> = {
@@ -91,9 +94,22 @@ export default function ProfilePage() {
       <section className="profile-main-grid">
         <div className="profile-main-column">
           <article className="profile-panel">
-            <div className="profile-panel-head"><div><span className="section-kicker">Acesso rápido</span><h2>O que quer fazer?</h2></div></div>
+            <div className="profile-panel-head"><div><span className="section-kicker">Novo pedido</span><h2>O que precisa hoje?</h2></div></div>
+            <div className="kind-grid profile-kind-grid">
+              {ORDER_KIND_LIST.map((option) => (
+                <Link key={option.value} to={`/pedir?tipo=${orderKindToParam(option.value)}`} className="kind-card">
+                  <span className="kind-icon" aria-hidden="true">{option.icon}</span>
+                  <strong>{option.label}</strong>
+                  <small>{option.tagline}</small>
+                  <p>{option.description}</p>
+                  <span className="kind-check">Começar →</span>
+                </Link>
+              ))}
+            </div>
+          </article>
+          <article className="profile-panel">
+            <div className="profile-panel-head"><div><span className="section-kicker">Acesso rápido</span><h2>Outras secções</h2></div></div>
             <div className="profile-quick-grid">
-              <Link to="/pedir" className="profile-action-card primary-action"><span className="profile-action-icon">+</span><div><strong>Pedir gás</strong><small>Começar um novo pedido.</small></div><span className="profile-arrow">→</span></Link>
               <Link to="/rastrear" className="profile-action-card"><span className="profile-action-icon">⌖</span><div><strong>Rastrear pedido</strong><small>Ver o estado atualizado das entregas.</small></div><span className="profile-arrow">→</span></Link>
               <Link to="/enderecos" className="profile-action-card"><span className="profile-action-icon">⌂</span><div><strong>Meus endereços</strong><small>Guarde destinos recorrentes e referências.</small></div><span className="profile-arrow">→</span></Link>
               <Link to="/notificacoes" className="profile-action-card"><span className="profile-action-icon">!</span><div><strong>Notificações</strong><small>Veja atualizações importantes dos pedidos.</small></div><span className="profile-arrow">→</span></Link>
@@ -102,7 +118,7 @@ export default function ProfilePage() {
           </article>
           <article className="profile-panel">
             <div className="profile-panel-head"><div><span className="section-kicker">Atividade</span><h2>Histórico de pedidos</h2></div></div>
-            {orders.length === 0 && !loading ? <p>Ainda não fez nenhum pedido.</p> : orders.slice(0, 8).map((order) => <div className="recent-order-card" key={order.id}><div className="recent-order-product"><div className="cylinder small">GÁS</div><div><strong>{order.items.map((item) => `${item.quantity} × ${item.variantName}`).join(', ')}</strong><span>{order.reference} · {new Date(order.createdAt).toLocaleDateString('pt-AO')}</span></div></div><div className="recent-order-status"><span className="status-pill">{statusLabels[order.status] ?? order.status}</span><strong>{formatAOA(order.pricing.total)}</strong><Link to={`/rastrear?orderId=${encodeURIComponent(order.id)}`} className="soft-link">Rastrear</Link></div></div>)}
+            {orders.length === 0 && !loading ? <p>Ainda não fez nenhum pedido.</p> : orders.slice(0, 8).map((order) => <div className="recent-order-card" key={order.id}><div className="recent-order-product"><div className="cylinder small">GÁS</div><div><strong>{order.items.map((item) => `${item.quantity} × ${item.variantName}`).join(', ')}</strong><span>{order.reference} · {new Date(order.createdAt).toLocaleDateString('pt-AO')}</span><span className="order-kind-badge">{ORDER_KIND_META[normalizeOrderKind(order.bottleExchangeType)].label}</span></div></div><div className="recent-order-status"><span className="status-pill">{statusLabels[order.status] ?? order.status}</span><strong>{formatAOA(order.pricing.total)}</strong><Link to={`/rastrear?orderId=${encodeURIComponent(order.id)}`} className="soft-link">Rastrear</Link></div></div>)}
           </article>
         </div>
         <aside className="profile-side-column">

@@ -1,5 +1,5 @@
 import { apiPost } from '../lib/api';
-import type { DeliveryType, GasProduct } from '../types/gas';
+import type { DeliveryType, GasProduct, OrderKind } from '../types/gas';
 
 export type BackendDeliveryType = 'EXPRESS' | 'SCHEDULED';
 
@@ -16,6 +16,7 @@ export interface QuoteAvailableResponse {
     deliveryFee: number;
     platformFee: number;
     discount: number;
+    cylinderFee: number;
     total: number;
     currency: 'AOA';
     distanceKm: number;
@@ -37,6 +38,8 @@ export interface QuotePricingView {
   deliveryFee: number;
   platformFee: number;
   discount: number;
+  /** Cilindros novos incluídos (0 na troca e na recarga). */
+  cylinderFee: number;
   total: number;
   currency: 'AOA';
   distanceKm: number | null;
@@ -71,6 +74,7 @@ export async function createQuote(params: {
   longitude: number;
   deliveryAddress: string;
   scheduledAt?: string | null;
+  bottleExchangeType?: OrderKind;
 }): Promise<QuotePricingView> {
   const items: QuoteRequestItem[] = [{ variantId: params.product.id, quantity: params.quantity }];
   const payload = {
@@ -79,6 +83,7 @@ export async function createQuote(params: {
     deliveryAddress: params.deliveryAddress,
     latitude: params.latitude,
     longitude: params.longitude,
+    bottleExchangeType: params.bottleExchangeType ?? 'REFILL_EXCHANGE',
     ...(params.scheduledAt ? { scheduledAt: params.scheduledAt } : {}),
   };
   const response = await apiPost<QuoteResponse>('/orders/quote', payload, { requireAuth: false });
@@ -88,6 +93,7 @@ export async function createQuote(params: {
       deliveryFee: 0,
       platformFee: 0,
       discount: 0,
+      cylinderFee: 0,
       total: 0,
       currency: 'AOA',
       distanceKm: null,
@@ -102,6 +108,7 @@ export async function createQuote(params: {
     deliveryFee: response.pricing.deliveryFee,
     platformFee: response.pricing.platformFee,
     discount: response.pricing.discount ?? 0,
+    cylinderFee: response.pricing.cylinderFee ?? 0,
     total: response.pricing.total,
     currency: response.pricing.currency ?? 'AOA',
     distanceKm: response.pricing.distanceKm,

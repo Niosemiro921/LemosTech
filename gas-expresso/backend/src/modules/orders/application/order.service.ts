@@ -25,6 +25,7 @@ type OrderQuote =
         deliveryFee: number;
         platformFee: number;
         discount: 0;
+        cylinderFee: number;
         total: number;
         currency: 'AOA';
         distanceKm: number;
@@ -59,6 +60,8 @@ export class OrderService {
     }
 
     const subtotal = normalizedItems.reduce((sum, item) => sum + variants.get(item.variantId)!.unitPrice * item.quantity, 0);
+    // Cilindros novos são cobrados à parte; na troca e na recarga o cliente já é dono da botija.
+    const cylinderFee = this.cylinderFee(normalizedItems, variants, dto.bottleExchangeType);
     const distanceKm = round2(this.haversine(dto.latitude, dto.longitude, candidate.latitude, candidate.longitude));
     const deliveryFee = this.deliveryFee(distanceKm, dto.deliveryType);
     const platformFee = Math.round(subtotal * this.platformCommissionRate());
@@ -74,7 +77,8 @@ export class OrderService {
         deliveryFee,
         platformFee,
         discount: 0,
-        total: subtotal + deliveryFee + platformFee,
+        cylinderFee,
+        total: subtotal + cylinderFee + deliveryFee + platformFee,
         currency: 'AOA',
         distanceKm,
         estimatedMinutes,
@@ -131,10 +135,16 @@ export class OrderService {
             deliveryFee: quote.pricing.deliveryFee,
             platformFee: quote.pricing.platformFee,
             discount: quote.pricing.discount,
+            cylinderFee: quote.pricing.cylinderFee,
             total: quote.pricing.total,
             distanceKm: quote.pricing.distanceKm,
             estimatedMinutes: quote.pricing.estimatedMinutes,
             pricingVersion: quote.pricing.pricingVersion,
+            changeForAmount: dto.changeForAmount ?? null,
+            bottleExchangeType: dto.bottleExchangeType?.trim() || 'REFILL_EXCHANGE',
+            bottleBrand: dto.bottleBrand?.trim() || 'Sonangol',
+            valveType: dto.valveType?.trim() || 'QUICK_20MM',
+            deliveryNotes: dto.deliveryNotes?.trim() || null,
             items: {
               create: quote.normalizedItems.map((item) => {
                 const variant = quote.variants.get(item.variantId)!;
@@ -304,6 +314,12 @@ export class OrderService {
     return Math.round(base + distanceKm * perKm);
   }
 
+  /** Total dos cilindros novos: só existe em pedidos de compra de botija (NEW_CYLINDER). */
+  private cylinderFee(items: Array<{ variantId: string; quantity: number }>, variants: Map<string, ProductVariant>, exchangeType?: string) {
+    if (exchangeType !== 'NEW_CYLINDER') return 0;
+    return items.reduce((sum, item) => sum + (variants.get(item.variantId)?.cylinderPrice ?? 0) * item.quantity, 0);
+  }
+
   private estimateMinutes(distanceKm: number, type: DeliveryType) {
     const base = type === DeliveryType.EXPRESS ? 15 : 30;
     return Math.max(base, Math.ceil(distanceKm * (type === DeliveryType.EXPRESS ? 3.5 : 5)) + base);
@@ -322,7 +338,39 @@ export class OrderService {
   }
 
   private publicOrder(order: any) {
-    return { id: order.id, reference: order.reference, status: order.status, deliveryType: order.deliveryType, paymentMethod: order.paymentMethod, deliveryAddress: order.deliveryAddress, latitude: order.latitude, longitude: order.longitude, scheduledAt: order.scheduledAt, pricing: { subtotal: order.subtotal, deliveryFee: order.deliveryFee, platformFee: order.platformFee, discount: order.discount, total: order.total, currency: order.currency, distanceKm: order.distanceKm, estimatedMinutes: order.estimatedMinutes, pricingVersion: order.pricingVersion }, supplier: order.supplier ? { id: order.supplier.id, tradeName: order.supplier.tradeName, latitude: order.supplier.latitude, longitude: order.supplier.longitude } : null, items: order.items ?? [], statusHistory: order.statusHistory ?? [], createdAt: order.createdAt, updatedAt: order.updatedAt };
+    return {
+      id: order.id,
+      reference: order.reference,
+      status: order.status,
+      deliveryType: order.deliveryType,
+      paymentMethod: order.paymentMethod,
+      changeForAmount: order.changeForAmount ?? null,
+      bottleExchangeType: order.bottleExchangeType ?? 'REFILL_EXCHANGE',
+      bottleBrand: order.bottleBrand ?? 'Sonangol',
+      valveType: order.valveType ?? 'QUICK_20MM',
+      deliveryNotes: order.deliveryNotes ?? null,
+      deliveryAddress: order.deliveryAddress,
+      latitude: order.latitude,
+      longitude: order.longitude,
+      scheduledAt: order.scheduledAt,
+      pricing: {
+        subtotal: order.subtotal,
+        deliveryFee: order.deliveryFee,
+        platformFee: order.platformFee,
+        discount: order.discount,
+        cylinderFee: order.cylinderFee ?? 0,
+        total: order.total,
+        currency: order.currency,
+        distanceKm: order.distanceKm,
+        estimatedMinutes: order.estimatedMinutes,
+        pricingVersion: order.pricingVersion,
+      },
+      supplier: order.supplier ? { id: order.supplier.id, tradeName: order.supplier.tradeName, latitude: order.supplier.latitude, longitude: order.supplier.longitude } : null,
+      items: order.items ?? [],
+      statusHistory: order.statusHistory ?? [],
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+    };
   }
 }
 

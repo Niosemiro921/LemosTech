@@ -171,4 +171,6 @@ DISPATCH_RADIUS_KM=15
 DISPATCH_OFFER_TTL_SECONDS=30
 ```
 
-O seed carrega apenas o catálogo de produtos: não cria contas de demonstração nem palavras-passe predefinidas. Clientes registam-se pela aplicação; candidaturas de fornecedores e entregadores precisam de aprovação administrativa antes de operar.
+O seed carrega o catálogo de produtos e cria contas demo para todos os perfis com o mesmo número e palavra-passe: `923000010` / `Demo@123`.
+
+Os utilizadores são criados em modo de testes locais, mantendo os perfis de cliente, entregador, fornecedor e administrador disponíveis com as mesmas credenciais. Em produção, os utilizadores continuam a registar-se pela aplicação e as candidaturas de fornecedores e entregadores precisam de aprovação administrativa antes de operar.

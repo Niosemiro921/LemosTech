@@ -15,7 +15,7 @@ export class DispatchController {
   constructor(private readonly dispatch: DispatchService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   @Get('drivers/me')
   status(@Req() req: Request & { user: { sub: string } }) {
     return this.dispatch.getDriverStatus(req.user.sub);
@@ -33,42 +33,42 @@ export class DispatchController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   @Get('drivers/me/offers')
   offers(@Req() req: Request & { user: { sub: string } }) {
     return this.dispatch.listDriverOffers(req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   @Post('drivers/me/offers/:offerId/accept')
   accept(@Req() req: Request & { user: { sub: string } }, @Param('offerId') offerId: string) {
     return this.dispatch.acceptDriverOffer(req.user.sub, offerId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   @Post('drivers/me/offers/:offerId/reject')
   reject(@Req() req: Request & { user: { sub: string } }, @Param('offerId') offerId: string) {
     return this.dispatch.rejectDriverOffer(req.user.sub, offerId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   @Post('drivers/me/online')
   online(@Req() req: Request & { user: { sub: string } }, @Body() dto: DriverLocationDto) {
     return this.dispatch.startDriver(req.user.sub, dto.latitude, dto.longitude);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   @Post('drivers/me/offline')
   offline(@Req() req: Request & { user: { sub: string } }) {
     return this.dispatch.stopDriver(req.user.sub);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
-  @Roles(Role.DRIVER)
+  @Roles(Role.DRIVER, Role.PRESTADOR)
   @Post('drivers/me/location')
   location(@Req() req: Request & { user: { sub: string } }, @Body() dto: DriverLocationDto) {
     return this.dispatch.updateDriverLocation(req.user.sub, dto.latitude, dto.longitude);
@@ -78,6 +78,13 @@ export class DispatchController {
   @Roles(Role.CUSTOMER)
   @Get('orders/mine/:orderId/tracking')
   tracking(@Req() req: Request & { user: { sub: string } }, @Param('orderId') orderId: string) {
+    return this.dispatch.getCustomerTracking(req.user.sub, orderId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
+  @Roles(Role.CUSTOMER)
+  @Get('dispatch/tracking/:orderId')
+  trackingAlias(@Req() req: Request & { user: { sub: string } }, @Param('orderId') orderId: string) {
     return this.dispatch.getCustomerTracking(req.user.sub, orderId);
   }
 }

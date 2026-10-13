@@ -18,7 +18,7 @@ export interface DriverOrder {
   deliveryAddress: string;
   paymentMethod: string;
   items: Array<{ variantName: string; quantity: number; weightKg: number }>;
-  pricing: { total: number; currency: string };
+  pricing: { subtotal?: number; deliveryFee?: number; platformFee?: number; discount?: number; total: number; currency: string; distanceKm?: number; estimatedMinutes?: number };
   supplier: { tradeName: string; latitude: number | null; longitude: number | null } | null;
 }
 
@@ -44,7 +44,7 @@ export interface DriverEarning {
   gross: number;
   platformFee: number;
   net: number;
-  status: 'ACCRUED';
+  status: string;
   createdAt: string;
 }
 
@@ -52,7 +52,7 @@ export const fetchDriverProfile = () => apiGet<DriverProfile>('/drivers/me');
 export const fetchDriverOffers = () => apiGet<DriverOffer[]>('/drivers/me/offers');
 export const fetchCurrentDelivery = () => apiGet<DriverDelivery | null>('/drivers/me/deliveries/current');
 export const fetchDriverDelivery = (id: string) => apiGet<DriverDelivery>(`/drivers/me/deliveries/${encodeURIComponent(id)}`);
-export const fetchDriverEarnings = () => apiGet<DriverEarning[]>('/drivers/me/earnings');
+export const fetchDriverEarnings = () => apiGet<DriverEarning[]>('/drivers/me/wallet/earnings');
 export const setDriverOnline = (latitude: number, longitude: number) => apiPost('/drivers/me/online', { latitude, longitude });
 export const setDriverOffline = () => apiPost('/drivers/me/offline');
 export const updateDriverLocation = (latitude: number, longitude: number) => apiPost('/drivers/me/location', { latitude, longitude });

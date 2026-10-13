@@ -5,6 +5,8 @@ import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { DispatchService } from '../../dispatch/application/dispatch.service';
 import { DriverFinanceService } from '../../driver-finance/application/driver-finance.service';
 import { AdminReviewRepositoryPort } from '../domain/admin-review.repository';
+import { MailService } from '../../mail/mail.service';
+import { SendEmailDto } from './dto/send-email.dto';
 
 type PartnerAction = 'approve' | 'reject' | 'suspend' | 'reactivate';
 type PartnerRecord = Prisma.UserGetPayload<{ include: { driver: true; supplier: true } }>;
@@ -16,14 +18,16 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly dispatch: DispatchService,
     private readonly driverFinance: DriverFinanceService,
+    private readonly mail: MailService,
   ) {}
 
   async getOverview() {
     const expirationLimit = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const [customers, companies, drivers, activeOrders, completedOrders, pendingApplications, incidentsOpen, expiringDocuments] = await Promise.all([
+    const [customers, companies, drivers, prestadores, activeOrders, completedOrders, completedRevenue, pendingApplications, incidentsOpen, expiringDocuments] = await Promise.all([
       this.prisma.user.count({ where: { role: PrismaUserRole.CUSTOMER } }),
       this.prisma.user.count({ where: { role: PrismaUserRole.SUPPLIER } }),
       this.prisma.user.count({ where: { role: PrismaUserRole.DRIVER } }),
+      this.prisma.user.count({ where: { role: PrismaUserRole.PRESTADOR } }),
       this.prisma.order.count({
         where: {
           status: {
@@ -39,9 +43,13 @@ export class AdminService {
       this.prisma.order.count({
         where: { status: { in: [PrismaOrderStatus.DELIVERED, PrismaOrderStatus.COMPLETED] } },
       }),
+      this.prisma.order.aggregate({
+        where: { status: { in: [PrismaOrderStatus.DELIVERED, PrismaOrderStatus.COMPLETED] } },
+        _sum: { total: true },
+      }),
       this.prisma.user.count({
         where: {
-          role: { in: [PrismaUserRole.DRIVER, PrismaUserRole.SUPPLIER] },
+          role: { in: [PrismaUserRole.DRIVER, PrismaUserRole.PRESTADOR, PrismaUserRole.SUPPLIER] },
           status: { in: [PrismaAccountStatus.PENDING_REVIEW, PrismaAccountStatus.DOCUMENTS_REQUIRED] },
         },
       }),
@@ -54,17 +62,22 @@ export class AdminService {
       }),
     ]);
 
-    return { customers, companies, drivers, activeOrders, completedOrders, incidentsOpen, pendingApplications, expiringDocuments };
+    const [walletTopUpsPending, walletWithdrawalsPending] = await Promise.all([
+      this.prisma.walletTopUp.count({ where: { status: 'PENDING' } }),
+      this.prisma.walletWithdrawal.count({ where: { status: 'PENDING' } }),
+    ]);
+    const byStatus = await Promise.all(Object.values(PrismaAccountStatus).map(async (status) => [status, await this.prisma.user.count({ where: { status } })] as const));
+    return { customers, companies, drivers, prestadores, activeOrders, completedOrders, revenue: completedRevenue._sum.total ?? 0, incidentsOpen, pendingApplications, expiringDocuments, walletTopUpsPending, walletWithdrawalsPending, usersByStatus: Object.fromEntries(byStatus), usersByRole: { CUSTOMER: customers, DRIVER: drivers, PRESTADOR: prestadores, SUPPLIER: companies } };
   }
 
   async listPartners(type?: string) {
-    if (type && type !== Role.DRIVER && type !== Role.SUPPLIER) {
-      throw new BadRequestException('O tipo de parceiro deve ser DRIVER ou SUPPLIER.');
+    if (type && ![Role.DRIVER, Role.PRESTADOR, Role.SUPPLIER].includes(type as Role)) {
+      throw new BadRequestException('O tipo de parceiro deve ser DRIVER, PRESTADOR ou SUPPLIER.');
     }
 
     const partners = await this.prisma.user.findMany({
       where: {
-        role: type ? (type as PrismaUserRole) : { in: [PrismaUserRole.DRIVER, PrismaUserRole.SUPPLIER] },
+        role: type ? (type as PrismaUserRole) : { in: [PrismaUserRole.DRIVER, PrismaUserRole.PRESTADOR, PrismaUserRole.SUPPLIER] },
       },
       include: { driver: true, supplier: true },
       orderBy: { createdAt: 'desc' },
@@ -112,7 +125,7 @@ export class AdminService {
         where: { id: userId },
         include: { driver: true, supplier: true },
       });
-      if (!current || (current.role !== PrismaUserRole.DRIVER && current.role !== PrismaUserRole.SUPPLIER)) {
+      if (!current || !([PrismaUserRole.DRIVER, PrismaUserRole.PRESTADOR, PrismaUserRole.SUPPLIER] as PrismaUserRole[]).includes(current.role)) {
         throw new NotFoundException('Parceiro não encontrado.');
       }
       if (!transition.from.includes(current.status)) {
@@ -183,6 +196,25 @@ export class AdminService {
     return this.driverFinance.decideTopUp(adminUserId, id, approve, reason);
   }
 
+  listWalletWithdrawals() { return this.driverFinance.listPendingWithdrawals(); }
+
+  approveWalletWithdrawal(adminUserId: string, id: string, reason?: string) { return this.driverFinance.decideWithdrawal(adminUserId, id, 'APPROVE', reason); }
+  rejectWalletWithdrawal(adminUserId: string, id: string, reason: string) { return this.driverFinance.decideWithdrawal(adminUserId, id, 'REJECT', reason); }
+  payWalletWithdrawal(adminUserId: string, id: string, reason?: string) { return this.driverFinance.decideWithdrawal(adminUserId, id, 'PAY', reason); }
+
+  async sendEmail(adminUserId: string, dto: SendEmailDto) {
+    let to = dto.to?.trim();
+    if (!to && dto.userId) {
+      const target = await this.prisma.user.findUnique({ where: { id: dto.userId }, select: { email: true } });
+      if (!target?.email) throw new BadRequestException('O utilizador selecionado não possui email.');
+      to = target.email;
+    }
+    if (!to) throw new BadRequestException('Informe um destinatário ou userId.');
+    const result = await this.mail.send(to, dto.subject, dto.message);
+    await this.prisma.auditLog.create({ data: { actorUserId: adminUserId, action: PrismaAdminReviewAction.EMAIL_SENT, reason: `Email enviado para ${to}: ${dto.subject}`.slice(0, 1000), entity: 'EMAIL', entityId: dto.userId ?? null } });
+    return result;
+  }
+
   async listAuditLog() {
     const entries = await this.prisma.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
@@ -217,7 +249,7 @@ export class AdminService {
 
   listApplications(role?: Role, status?: AccountStatus) {
     if (role === Role.CUSTOMER || role === Role.ADMIN) {
-      throw new BadRequestException('A revisão administrativa aceita apenas DRIVER ou SUPPLIER.');
+      throw new BadRequestException('A revisão administrativa aceita apenas DRIVER, PRESTADOR ou SUPPLIER.');
     }
     return this.reviews.listApplications({ role, status });
   }

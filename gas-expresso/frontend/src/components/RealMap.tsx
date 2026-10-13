@@ -9,11 +9,14 @@ interface RealMapProps {
   onChange?: (point: MapPoint) => void;
   markerLabel?: string;
   interactive?: boolean;
+  initialCenter?: MapPoint;
 }
 
-const WORLD_CENTER: MapPoint = { lat: 0, lng: 0 };
+// Default map viewport for an Angola-first service. This is only a map starting view,
+// never presented as the customer's live location. The delivery pin appears only after selection.
+const ANGOLA_MAP_CENTER: MapPoint = { lat: -8.8389, lng: 13.2894 };
 
-export function RealMap({ value, compact = false, onChange, markerLabel = 'Local selecionado', interactive = Boolean(onChange) }: RealMapProps) {
+export function RealMap({ value, compact = false, onChange, markerLabel = 'Local selecionado', interactive = Boolean(onChange), initialCenter }: RealMapProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.CircleMarker | null>(null);
@@ -27,14 +30,15 @@ export function RealMap({ value, compact = false, onChange, markerLabel = 'Local
   useEffect(() => {
     if (!hostRef.current || mapRef.current) return;
 
-    const initial = value ?? WORLD_CENTER;
+    const initial = value ?? initialCenter ?? ANGOLA_MAP_CENTER;
     const hasValue = Boolean(value);
+    const initialZoom = hasValue ? 16 : initialCenter ? 11 : 12;
     const map = L.map(hostRef.current, {
       zoomControl: false,
       attributionControl: true,
       scrollWheelZoom: true,
       dragging: true,
-    }).setView([initial.lat, initial.lng], hasValue ? 15 : 2);
+    }).setView([initial.lat, initial.lng], initialZoom);
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -47,7 +51,7 @@ export function RealMap({ value, compact = false, onChange, markerLabel = 'Local
       weight: 4,
       color: '#ffffff',
       fillColor: '#e6532e',
-      fillOpacity: hasValue ? 1 : 0.45,
+      fillOpacity: 1,
     });
     if (hasValue) marker.addTo(map);
     marker.bindTooltip(labelRef.current, { direction: 'top', offset: [0, -8] });
@@ -85,7 +89,7 @@ export function RealMap({ value, compact = false, onChange, markerLabel = 'Local
     const latLng = L.latLng(value.lat, value.lng);
     marker.addTo(map);
     marker.setLatLng(latLng).setStyle({ fillOpacity: 1 });
-    if (!interactiveRef.current) map.setView(latLng, Math.max(map.getZoom(), 15), { animate: true });
+    map.setView(latLng, Math.max(map.getZoom(), 15), { animate: true });
   }, [value?.lat, value?.lng, markerLabel]);
 
   return <div ref={hostRef} className={`real-map ${compact ? 'compact' : ''}`} aria-label={interactive ? 'Mapa interativo' : 'Mapa operacional'} />;

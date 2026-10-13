@@ -20,10 +20,10 @@ A implementação partiu dos serviços existentes no frontend e reaproveitou os 
 
 ## 2. Alterações principais
 ### Sessão e autorização
-- Roles: `CUSTOMER`, `DRIVER`, `SUPPLIER`, `ADMIN`, conforme o enum do backend.
+- Roles: `CUSTOMER`, `DRIVER`, `SUPPLIER`, `PRESTADOR`, `ADMIN`.
 - `Pedir gás` e `Rastrear` só aparecem para Cliente.
 - Rotas igualmente protegidas por `RequireAuth`.
-- Logout reutilizável em Header e Admin.
+- Logout reutilizável em Header, Admin e Prestador.
 - Sessão verificada por `/auth/me` nas áreas protegidas.
 
 ### Entregador
@@ -33,7 +33,7 @@ A implementação partiu dos serviços existentes no frontend e reaproveitou os 
 - Marker próprio atualizado imediatamente com a posição do dispositivo.
 - Ofertas reais ordenadas por distância e opcionalmente limitadas por raio configurado.
 - Bottom sheet/área deslizável de ofertas em mobile.
-- Histórico de ganhos usa `/drivers/me/earnings`; calcula 90% da taxa de entrega após conclusão, separado do saldo operacional e de levantamentos.
+- Ganhos derivados do endpoint `/drivers/me/earnings`.
 - Carteira baseada em `/drivers/me/wallet`, `/transactions`, `/top-ups`, `/priority-policy`.
 - Recarga sem saldo local artificial.
 - Levantamento preparado apenas por endpoint configurável real.
@@ -50,14 +50,16 @@ A implementação partiu dos serviços existentes no frontend e reaproveitou os 
 - Stock, pedidos, documentos, equipa e horários.
 - Lotes, financeiro, CRM e relatórios possuem superfícies próprias, mas não fabricam dados quando os endpoints não estão identificados.
 
-### Admin
+### Admin / Prestador
 - Logout visível e reutilizável.
 - Admin com parceiros, pedidos, dispatch, auditoria e recargas.
+- Prestador com shell próprio e navegação restrita.
 
 ## 3. Ficheiros criados ou fortemente refatorados
 ### Componentes
 - `src/components/LogoutButton.tsx`
 - `src/components/SupplierShell.tsx`
+- `src/components/PrestadorShell.tsx`
 - `src/components/RequireAuth.tsx`
 - `src/components/RealMap.tsx`
 

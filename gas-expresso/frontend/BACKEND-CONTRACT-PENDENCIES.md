@@ -4,13 +4,12 @@ Este documento não cria contratos fictícios. Ele identifica apenas as capacida
 
 | Funcionalidade | Endpoint / contrato esperado pelo frontend | Estado |
 |---|---|---|
-| Logout server-side | variável `VITE_AUTH_LOGOUT_PATH` | Não configurado: JWT atual não tem revogação |
-| Levantamento do entregador | `VITE_DRIVER_WITHDRAWAL_PATH` | Pendente de provedor e fluxo de liquidação |
-| Histórico de levantamentos | endpoint de listagem de levantamentos | Pendente de provedor e fluxo de liquidação |
-| Pagamentos digitais | Futuro `POST /payments/intents` | Pendente de provedor; o frontend suporta apenas o fluxo implementado de pagamento na entrega |
-| Recargas para Admin | `GET /admin/wallet/top-ups` | Implementado; análise manual |
-| Confirmar recarga | `POST /admin/wallet/top-ups/:id/confirm` | Implementado; exige confirmação operacional externa |
-| Rejeitar recarga | `POST /admin/wallet/top-ups/:id/reject` | Implementado; motivo obrigatório |
+| Logout server-side | variável `VITE_AUTH_LOGOUT_PATH` | Pendente de identificar no backend |
+| Levantamento do entregador | `VITE_DRIVER_WITHDRAWAL_PATH` | Pendente |
+| Histórico de levantamentos | endpoint de listagem de levantamentos | Pendente |
+| Recargas para Admin | `VITE_ADMIN_WALLET_TOPUPS_PATH` | Pendente |
+| Confirmar recarga | `VITE_ADMIN_WALLET_TOPUP_CONFIRM_PATH_TEMPLATE` | Pendente |
+| Rejeitar recarga | `VITE_ADMIN_WALLET_TOPUP_REJECT_PATH_TEMPLATE` | Pendente |
 | Lotes ERP | `/suppliers/me/lots` | Pendente |
 | Financeiro ERP | `/suppliers/me/invoices`, `/payments`, `/expenses` | Pendente |
 | Clientes CRM | `/suppliers/me/customers` | Pendente |

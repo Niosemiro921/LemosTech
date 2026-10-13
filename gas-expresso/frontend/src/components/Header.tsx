@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentUser, rolePath } from '../services/auth';
 import { LogoutButton } from './LogoutButton';
 
-const labels = { CUSTOMER: 'Minha conta', DRIVER: 'Operação', SUPPLIER: 'Fornecedor', ADMIN: 'Administração' } as const;
+const labels = { CUSTOMER: 'Minha conta', DRIVER: 'Operação', SUPPLIER: 'Fornecedor', PRESTADOR: 'Prestador', ADMIN: 'Administração' } as const;
 
 export function Header() {
   const location = useLocation();
@@ -29,7 +29,20 @@ export function Header() {
         {!user && <Link className={location.pathname === '/acesso' ? 'active' : ''} to="/acesso">Áreas</Link>}
       </nav>
       <div className="header-actions">
-        {user ? <><button className="header-user-chip" type="button" onClick={() => navigate(accountPath)}><span className="header-user-avatar">{(user.name ?? 'GE').split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()}</span><span className="header-user-copy"><strong>{user.name ?? profileLabel}</strong><small>{profileLabel}</small></span></button><LogoutButton className="header-logout-btn" label="Terminar sessão" /></> : <Link to="/login" className="header-login">Entrar</Link>}
+        {user ? (
+          <>
+            <button className="header-user-chip" type="button" onClick={() => navigate(accountPath)}>
+              <span className="header-user-avatar">{(user.name ?? 'GE').split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()}</span>
+              <span className="header-user-copy"><strong>{user.name ?? profileLabel}</strong><small>{profileLabel}</small></span>
+            </button>
+            <LogoutButton className="header-logout-btn" label="Terminar sessão" />
+          </>
+        ) : (
+          <>
+            <Link to="/login" className="header-login">Entrar</Link>
+            <Link to="/registar/customer" className="header-cta">Criar conta</Link>
+          </>
+        )}
         {customer && <Link to="/pedir" className="header-cta">Pedir gás</Link>}
         <button className={`mobile-menu-trigger ${menuOpen ? 'is-open' : ''}`} type="button" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}><span/><span/><span/></button>
       </div>

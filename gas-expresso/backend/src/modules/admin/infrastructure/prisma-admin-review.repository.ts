@@ -37,20 +37,32 @@ export class PrismaAdminReviewRepository extends AdminReviewRepositoryPort {
       };
     }>,
   ): ReviewApplicationRecord {
-    const profile: ReviewApplicationRecord['profile'] = user.driver
+    const companyProfile = user.supplier
+      ? {
+          legalName: user.supplier.legalName,
+          tradeName: user.supplier.tradeName,
+          nif: user.supplier.nif,
+          responsibleName: user.supplier.responsibleName,
+        }
+      : null;
+
+    const driverProfile = user.driver
       ? {
           fullName: user.driver.fullName,
           documentNumber: user.driver.documentNumber,
           vehicleType: user.driver.vehicleType,
         }
-      : user.supplier
-        ? {
-            legalName: user.supplier.legalName,
-            tradeName: user.supplier.tradeName,
-            nif: user.supplier.nif,
-            responsibleName: user.supplier.responsibleName,
-          }
-        : {};
+      : null;
+
+    // O Prestador é uma empresa parceira: a validação mostra os dados da empresa.
+    const preferCompany = Boolean(companyProfile) &&
+      (user.role === PrismaRole.PRESTADOR || user.role === PrismaRole.SUPPLIER || !driverProfile);
+
+    const profile: ReviewApplicationRecord['profile'] =
+      (preferCompany ? companyProfile : driverProfile) ??
+      companyProfile ??
+      driverProfile ??
+      {};
 
     return {
       id: user.id,
@@ -87,6 +99,7 @@ export class PrismaAdminReviewRepository extends AdminReviewRepositoryPort {
           : {
               in: [
                 PrismaRole.DRIVER,
+                PrismaRole.PRESTADOR,
                 PrismaRole.SUPPLIER,
               ],
             },
@@ -137,6 +150,7 @@ export class PrismaAdminReviewRepository extends AdminReviewRepositoryPort {
     // enquanto user.role é UserRole completo.
     if (
       user.role !== PrismaRole.DRIVER &&
+      user.role !== PrismaRole.PRESTADOR &&
       user.role !== PrismaRole.SUPPLIER
     ) {
       return null;

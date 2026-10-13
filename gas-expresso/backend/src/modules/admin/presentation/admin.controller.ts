@@ -89,6 +89,22 @@ export class AdminController {
     return this.admin.decideWalletTopUp(req.user.sub, id, false, dto.reason);
   }
 
+
+  @Get('wallet/withdrawals')
+  walletWithdrawals() { return this.admin.listWalletWithdrawals(); }
+
+  @Post('wallet/withdrawals/:id/approve')
+  approveWalletWithdrawal(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request & { user: { sub: string } }, @Body() dto?: ReviewDecisionDto) { return this.admin.approveWalletWithdrawal(req.user.sub, id, dto?.reason); }
+
+  @Post('wallet/withdrawals/:id/reject')
+  rejectWalletWithdrawal(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request & { user: { sub: string } }, @Body() dto: ReviewDecisionDto) { return this.admin.rejectWalletWithdrawal(req.user.sub, id, dto.reason!); }
+
+  @Post('wallet/withdrawals/:id/pay')
+  payWalletWithdrawal(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request & { user: { sub: string } }, @Body() dto?: ReviewDecisionDto) { return this.admin.payWalletWithdrawal(req.user.sub, id, dto?.reason); }
+
+  @Post('email')
+  sendEmail(@Body() dto: import('../application/dto/send-email.dto').SendEmailDto, @Req() req: Request & { user: { sub: string } }) { return this.admin.sendEmail(req.user.sub, dto); }
+
   @Get('applications')
   list(
     @Query('role') role?: Role,

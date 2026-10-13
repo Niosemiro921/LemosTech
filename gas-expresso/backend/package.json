@@ -1,7 +1,7 @@
 {
   "name": "gas-expresso-backend",
   "private": true,
-  "version": "0.5.0",
+  "version": "1.1.0",
   "scripts": {
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",

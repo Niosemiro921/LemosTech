@@ -10,12 +10,12 @@ export class PrismaUserRepository extends UserRepositoryPort {
     super();
   }
 
-  private map(user: User & { customer?: { fullName: string } | null }): UserRecord {
+  private map(user: User & { customer?: { fullName: string } | null; driver?: { fullName: string } | null; supplier?: { tradeName: string } | null }): UserRecord {
     return {
       id: user.id,
       phone: user.phone,
       email: user.email,
-      name: user.customer?.fullName ?? null,
+      name: user.customer?.fullName ?? user.driver?.fullName ?? user.supplier?.tradeName ?? user.name ?? null,
       passwordHash: user.passwordHash,
       role: user.role as Role,
       status: user.status as AccountStatus,
@@ -36,12 +36,24 @@ export class PrismaUserRepository extends UserRepositoryPort {
   }
 
   async findByPhone(phone: string): Promise<UserRecord | null> {
-    const user = await this.prisma.user.findUnique({ where: { phone }, include: { customer: true } });
+    const user = await this.prisma.user.findFirst({
+      where: { phone },
+      orderBy: { createdAt: 'asc' },
+      include: { customer: true, driver: true, supplier: true },
+    });
+    return user ? this.map(user) : null;
+  }
+
+  async findByPhoneAndRole(phone: string, role: Role): Promise<UserRecord | null> {
+    const user = await this.prisma.user.findFirst({
+      where: { phone, role: role as UserRole },
+      include: { customer: true, driver: true, supplier: true },
+    });
     return user ? this.map(user) : null;
   }
 
   async findById(id: string): Promise<UserRecord | null> {
-    const user = await this.prisma.user.findUnique({ where: { id }, include: { customer: true } });
+    const user = await this.prisma.user.findUnique({ where: { id }, include: { customer: true, driver: true, supplier: true } });
     return user ? this.map(user) : null;
   }
 
@@ -53,7 +65,7 @@ export class PrismaUserRepository extends UserRepositoryPort {
       const user = await tx.user.update({
         where: { id },
         data: input.email === undefined ? {} : { email: input.email },
-        include: { customer: true },
+        include: { customer: true, driver: true, supplier: true },
       });
       return this.map(user);
     });

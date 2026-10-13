@@ -4,7 +4,7 @@ import { apiGet } from '../lib/api';
 interface ApiProduct {
   name: string;
   description?: string | null;
-  variants: Array<{ id: string; name: string; weightKg: number; unitPrice: number }>;
+  variants: Array<{ id: string; name: string; weightKg: number; unitPrice: number; cylinderPrice?: number | null }>;
 }
 
 export async function fetchGasProducts(): Promise<GasProduct[]> {
@@ -14,8 +14,8 @@ export async function fetchGasProducts(): Promise<GasProduct[]> {
     size: `${variant.weightKg}kg` as GasProduct['size'],
     label: variant.name,
     price: variant.unitPrice,
+    cylinderPrice: variant.cylinderPrice ?? 0,
     description: product.description || product.name,
-    popular: variant.weightKg === 12,
   })));
 }
 

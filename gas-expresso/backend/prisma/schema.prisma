@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   CUSTOMER
   DRIVER
+  PRESTADOR
   SUPPLIER
   ADMIN
 }
@@ -24,8 +25,9 @@ enum AccountStatus {
 
 model User {
   id             String           @id @default(uuid()) @db.Uuid
-  phone          String           @unique
+  phone          String
   email          String?          @unique
+  name           String?
   passwordHash   String
   role           UserRole
   status         AccountStatus    @default(ACTIVE)
@@ -43,8 +45,24 @@ model User {
   supportTickets SupportTicket[]
   incidents      Incident[]
   documents      BusinessDocument[]
+  chatAsCustomer ChatThread[] @relation("ChatCustomer")
+  chatAsProfessional ChatThread[] @relation("ChatProfessional")
+  chatMessages ChatMessage[] @relation("ChatMessagesSent")
+  supplierCustomerInteractions SupplierCustomerInteraction[]
+  callsMade     CallSession[] @relation("CallsMade")
+  callsReceived CallSession[] @relation("CallsReceived")
 
+  @@unique([phone, role])
+  @@index([phone])
   @@index([role, status])
+}
+
+model RevokedToken {
+  jti       String   @id
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 model CustomerProfile {
@@ -157,6 +175,85 @@ model SupplierSchedule {
   @@unique([supplierId, dayOfWeek])
 }
 
+enum SupplierLotStatus {
+  IN_PRODUCTION
+  COMPLETED
+  DISTRIBUTED
+}
+
+model SupplierProductionLot {
+  id           String            @id @default(uuid()) @db.Uuid
+  supplierId   String            @db.Uuid
+  code         String
+  productionAt DateTime
+  quantity     Int
+  status       SupplierLotStatus  @default(IN_PRODUCTION)
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  supplier SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, code])
+  @@index([supplierId, productionAt])
+  @@index([supplierId, status])
+}
+
+enum SupplierInvoiceType {
+  SALE
+  PURCHASE
+}
+
+enum SupplierInvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model SupplierInvoice {
+  id            String                  @id @default(uuid()) @db.Uuid
+  supplierId    String                  @db.Uuid
+  number        String
+  type          SupplierInvoiceType
+  status        SupplierInvoiceStatus   @default(PENDING)
+  amount        Int
+  issueDate     DateTime
+  dueDate       DateTime?
+  paidAt        DateTime?
+  description   String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  supplier SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, number])
+  @@index([supplierId, issueDate])
+  @@index([supplierId, status])
+}
+
+enum SupplierCustomerInteractionType {
+  NOTE
+  CALL
+  FOLLOW_UP
+}
+
+model SupplierCustomerInteraction {
+  id           String                           @id @default(uuid()) @db.Uuid
+  supplierId   String                           @db.Uuid
+  customerId   String                           @db.Uuid
+  type         SupplierCustomerInteractionType
+  subject      String
+  message      String
+  nextActionAt DateTime?
+  createdAt    DateTime                         @default(now())
+
+  supplier SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  customer User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, customerId, createdAt])
+  @@index([supplierId, nextActionAt])
+}
+
 model DriverWallet {
   id                      String   @id @default(uuid()) @db.Uuid
   driverId                String   @unique @db.Uuid
@@ -169,6 +266,7 @@ model DriverWallet {
   driver       DriverProfile       @relation(fields: [driverId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
   topUps       WalletTopUp[]
+  withdrawals  WalletWithdrawal[]
 
   @@index([balance, reservedBalance])
 }
@@ -218,21 +316,65 @@ model WalletTopUp {
   @@index([walletId, createdAt])
 }
 
+
+enum WalletWithdrawalStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
+
+model WalletWithdrawal {
+  id             String                  @id @default(uuid()) @db.Uuid
+  walletId       String                  @db.Uuid
+  amount         Int
+  fee            Int                     @default(0)
+  cashAmount     Int
+  method         String
+  account        String
+  status         WalletWithdrawalStatus  @default(PENDING)
+  reference      String                  @unique
+  reviewNote     String?
+  requestedAt    DateTime                @default(now())
+  approvedAt     DateTime?
+  paidAt         DateTime?
+  reviewedById   String?                 @db.Uuid
+  paidById       String?                 @db.Uuid
+
+  wallet DriverWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, requestedAt])
+  @@index([status, requestedAt])
+}
+
 model DriverProfile {
-  id             String   @id @default(uuid()) @db.Uuid
-  userId         String   @unique @db.Uuid
-  fullName       String
-  documentNumber String
-  vehicleType       String
-  vehicleCapacityKg Int      @default(45)
-  latitude          Float?
-  longitude         Float?
-  lastLocationAt    DateTime?
-  isOnline          Boolean  @default(false)
-  ratingAverage     Float    @default(5)
-  acceptanceRate    Float    @default(1)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String   @id @default(uuid()) @db.Uuid
+  userId                String   @unique @db.Uuid
+  fullName              String
+  documentNumber        String
+  nif                   String?
+  driverLicenseNumber   String?
+  driverLicensePhotoUrl String?
+  photoUrl              String?
+  vehiclePhotoUrl       String?
+  vehiclePlate          String?
+  vehicleType           String
+  vehicleCapacityKg     Int      @default(45)
+  experienceYears       Int      @default(0)
+  province              String?
+  municipality          String?
+  neighborhood          String?
+  address               String?
+  insurancePolicyNumber String?
+  insuranceExpiresAt    DateTime?
+  latitude              Float?
+  longitude             Float?
+  lastLocationAt        DateTime?
+  isOnline              Boolean  @default(false)
+  ratingAverage         Float    @default(5)
+  acceptanceRate        Float    @default(1)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   offers     DriverOffer[]
@@ -240,25 +382,38 @@ model DriverProfile {
   wallet     DriverWallet?
 
   @@index([documentNumber])
+  @@index([nif])
+  @@index([vehiclePlate])
   @@index([isOnline, latitude, longitude])
 }
 
 model SupplierProfile {
-  id              String          @id @default(uuid()) @db.Uuid
-  userId          String          @unique @db.Uuid
-  legalName       String
-  tradeName       String
-  nif             String
-  responsibleName String
-  latitude        Float?
-  longitude       Float?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                        String            @id @default(uuid()) @db.Uuid
+  userId                    String            @unique @db.Uuid
+  legalName                 String
+  tradeName                 String
+  nif                       String
+  commercialRegistration   String?
+  activity                  String?
+  responsibleName           String
+  phoneAlt                  String?
+  province                  String?
+  municipality              String?
+  neighborhood              String?
+  address                   String?
+  photoUrl                  String?
+  latitude                  Float?
+  longitude                 Float?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
 
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  inventory  InventoryItem[]
-  orders     Order[]
-  schedules  SupplierSchedule[]
+  user          User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventory     InventoryItem[]
+  orders        Order[]
+  schedules     SupplierSchedule[]
+  lots          SupplierProductionLot[]
+  invoices      SupplierInvoice[]
+  interactions  SupplierCustomerInteraction[]
 
   @@index([nif])
   @@index([latitude, longitude])
@@ -273,6 +428,42 @@ enum AdminReviewAction {
   DISPATCH_RETRIED
   WALLET_TOP_UP_APPROVED
   WALLET_TOP_UP_REJECTED
+  WALLET_WITHDRAWAL_APPROVED
+  WALLET_WITHDRAWAL_REJECTED
+  WALLET_WITHDRAWAL_PAID
+  EMAIL_SENT
+}
+
+model ChatThread {
+  id             String       @id @default(uuid()) @db.Uuid
+  orderId        String       @unique @db.Uuid
+  customerId     String       @db.Uuid
+  professionalId String       @db.Uuid
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer     User          @relation("ChatCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  professional User          @relation("ChatProfessional", fields: [professionalId], references: [id], onDelete: Cascade)
+  messages     ChatMessage[]
+
+  @@index([customerId, updatedAt])
+  @@index([professionalId, updatedAt])
+}
+
+model ChatMessage {
+  id        String     @id @default(uuid()) @db.Uuid
+  threadId  String     @db.Uuid
+  senderId  String     @db.Uuid
+  message   String
+  createdAt DateTime   @default(now())
+  readAt    DateTime?
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User       @relation("ChatMessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@index([senderId, createdAt])
 }
 
 model AuditLog {
@@ -302,15 +493,17 @@ model Product {
 }
 
 model ProductVariant {
-  id          String          @id @default(uuid()) @db.Uuid
-  productId   String          @db.Uuid
-  sku         String          @unique
-  name        String
-  weightKg    Int
-  unitPrice   Int
-  active      Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id            String          @id @default(uuid()) @db.Uuid
+  productId     String          @db.Uuid
+  sku           String          @unique
+  name          String
+  weightKg      Int
+  unitPrice     Int
+  /// Preço do cilindro novo (hardware). Na troca não é cobrado: o cliente já é dono da botija.
+  cylinderPrice Int             @default(0)
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   inventory    InventoryItem[]
@@ -406,11 +599,18 @@ model Order {
   deliveryFee           Int
   platformFee           Int
   discount              Int          @default(0)
+  /// Total cobrado pelos cilindros novos (0 na troca e na recarga pura).
+  cylinderFee           Int          @default(0)
   total                 Int
   currency              String       @default("AOA")
   distanceKm            Float?
   estimatedMinutes      Int?
   pricingVersion        String       @default("v1")
+  changeForAmount       Int?
+  bottleExchangeType    String?      @default("REFILL_EXCHANGE")
+  bottleBrand           String?      @default("Sonangol")
+  valveType             String?      @default("QUICK_20MM")
+  deliveryNotes         String?
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
@@ -422,6 +622,8 @@ model Order {
   delivery              Delivery?
   driverOffers          DriverOffer[]
   incidents             Incident[]
+  chatThread            ChatThread?
+  callSessions          CallSession[]
 
   @@index([customerId, createdAt])
   @@index([supplierId, status, createdAt])
@@ -536,3 +738,35 @@ model DeliveryStatusHistory {
 
   @@index([deliveryId, createdAt])
 }
+
+enum CallStatus {
+  OFFERING
+  RINGING
+  CONNECTED
+  ENDED
+  REJECTED
+  MISSED
+}
+
+model CallSession {
+  id            String      @id @default(uuid()) @db.Uuid
+  orderId       String      @db.Uuid
+  callerId      String      @db.Uuid
+  receiverId    String      @db.Uuid
+  status        CallStatus  @default(OFFERING)
+  sdpOffer      String?
+  sdpAnswer     String?
+  iceCandidates Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  endedAt       DateTime?
+
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  caller        User        @relation("CallsMade", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver      User        @relation("CallsReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, status])
+  @@index([callerId, createdAt])
+  @@index([receiverId, createdAt])
+}
+
