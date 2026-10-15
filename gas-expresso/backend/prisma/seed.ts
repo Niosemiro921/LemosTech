@@ -111,6 +111,8 @@ async function main() {
           tradeName: profile.tradeName,
           nif: profile.nif,
           responsibleName: profile.responsibleName,
+          latitude: -8.8139,
+          longitude: 13.233,
         },
         create: {
           userId: user.id,
@@ -118,9 +120,29 @@ async function main() {
           tradeName: profile.tradeName,
           nif: profile.nif,
           responsibleName: profile.responsibleName,
+          latitude: -8.8139,
+          longitude: 13.233,
         },
       });
     }
+  }
+
+  const supplierUser = await prisma.user.findFirst({ where: { role: UserRole.SUPPLIER, phone: demoPhone } });
+  if (supplierUser) {
+    const supplierProfile = await prisma.supplierProfile.findUnique({ where: { userId: supplierUser.id } });
+    if (supplierProfile) {
+      const variant = await prisma.productVariant.findUnique({ where: { sku: 'GE-6KG' } });
+      if (variant) await prisma.inventoryItem.upsert({
+        where: { supplierId_variantId: { supplierId: supplierProfile.id, variantId: variant.id } },
+        update: { availableQty: 50, reservedQty: 0, reorderLevel: 5 },
+        create: { supplierId: supplierProfile.id, variantId: variant.id, availableQty: 50, reservedQty: 0, reorderLevel: 5 },
+      });
+    }
+  }
+  const driverUser = await prisma.user.findFirst({ where: { role: UserRole.DRIVER, phone: demoPhone } });
+  if (driverUser) {
+    const driverProfile = await prisma.driverProfile.findUnique({ where: { userId: driverUser.id } });
+    if (driverProfile) await prisma.driverProfile.update({ where: { id: driverProfile.id }, data: { latitude: -8.8139, longitude: 13.233, isOnline: true } });
   }
 
   console.log(`Catálogo inicial carregado. Utilizadores demo criados com o número ${demoPhone} e palavra-passe ${demoPassword}.`);

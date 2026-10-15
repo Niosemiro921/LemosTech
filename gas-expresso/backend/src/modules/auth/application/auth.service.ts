@@ -38,7 +38,7 @@ export class AuthService {
   }
 
   async registerPrestador(dto: RegisterPrestadorDto) {
-    return this.registerUser(dto.phone, dto.email, dto.password, Role.PRESTADOR, AccountStatus.PENDING_REVIEW, async (userId) => {
+    return this.registerUser(dto.phone, dto.email, dto.password, Role.PRESTADOR, AccountStatus.ACTIVE, async (userId) => {
       // Perfil comercial da empresa: é a informação que a Administração valida.
       await this.suppliers.create({
         userId,
@@ -93,11 +93,23 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const role = dto.role ?? Role.CUSTOMER;
-    const candidate = await this.users.findByPhoneAndRole(dto.phone, role);
+    const candidate = await this.users.findByPhone(dto.phone);
     const user = candidate ?? (await this.users.findByPhone(dto.phone));
 
     if (!user) throw new UnauthorizedException('Telefone ou palavra-passe inválidos.');
+
+    // Use the role from the login DTO if provided, otherwise use the user's actual role from DB
+    let role: Role;
+    if (dto.role) {
+      role = dto.role as Role;
+    } else {
+      role = user.role;
+    }
+
+    const suspendedOrRejected = ['SUSPENDED', 'REJECTED'].includes(user.status as string);
+    if (suspendedOrRejected) {
+      throw new UnauthorizedException(`Conta ${user.status}.`);
+    }
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Telefone ou palavra-passe inválidos.');
@@ -147,7 +159,7 @@ export class AuthService {
   }
 
   private async registerProfessional(dto: RegisterDriverDto) {
-    return this.registerUser(dto.phone, dto.email, dto.password, Role.DRIVER, AccountStatus.PENDING_REVIEW, async (userId) => {
+    return this.registerUser(dto.phone, dto.email, dto.password, Role.DRIVER, AccountStatus.ACTIVE, async (userId) => {
       const data = {
         userId,
         fullName: dto.fullName,
