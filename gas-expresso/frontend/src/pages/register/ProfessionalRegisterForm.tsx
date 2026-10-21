@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { extractMessage, login, registerDriver, registerPrestador, rolePath } from '../../services/auth';
+import { extractMessage, login, registerDriver, registerEmpresa, rolePath } from '../../services/auth';
 import { uploadLicensePhoto, uploadProfessionalPhoto, uploadVehiclePhoto } from '../../services/media';
 import { RegisterAccessFields } from './RegisterAccessFields';
 import { AccessForm, ProfessionalRegisterRole, emptyAccessForm, validateAccessForm } from './registerConfig';
@@ -15,7 +15,7 @@ type ProfessionalForm = {
   experienceYears: string;
   insurancePolicyNumber: string;
   insuranceExpiresAt: string;
-  // Prestador (empresa): identificação comercial
+  // Empresa (empresa): identificação comercial
   legalName: string;
   tradeName: string;
   nif: string;
@@ -44,11 +44,11 @@ interface ProfessionalFiles {
 /**
  * Candidatura profissional em dois passos:
  * - Entregador: documentos, veículo e fotografias.
- * - Prestador: apenas dados da empresa (é uma empresa parceira que opera entregas).
+ * - Empresa: apenas dados da empresa (é uma empresa parceira que opera entregas).
  */
 export default function ProfessionalRegisterForm({ role }: { role: ProfessionalRegisterRole }) {
   const navigate = useNavigate();
-  const isPrestador = role === 'PRESTADOR';
+  const isEmpresa = role === 'SUPPLIER';
   const [step, setStep] = useState(1);
   const [access, setAccess] = useState<AccessForm>(emptyAccessForm);
   const [profile, setProfile] = useState<ProfessionalForm>(emptyProfessionalForm);
@@ -67,7 +67,7 @@ export default function ProfessionalRegisterForm({ role }: { role: ProfessionalR
   }
 
   function validateProfessional(): string {
-    if (isPrestador) {
+    if (isEmpresa) {
       if (profile.legalName.trim().length < 2 || profile.tradeName.trim().length < 2 || profile.nif.trim().length < 5) {
         return 'Preencha a razão social, o nome comercial e o NIF da empresa.';
       }
@@ -102,9 +102,9 @@ export default function ProfessionalRegisterForm({ role }: { role: ProfessionalR
       const phone = access.phone.trim();
       const email = access.email.trim() || undefined;
 
-      if (isPrestador) {
-        await registerPrestador({
-          fullName: access.name.trim(),
+      if (isEmpresa) {
+        await registerEmpresa({
+          responsibleName: access.name.trim(),
           phone,
           email,
           password: access.password,
@@ -141,7 +141,7 @@ export default function ProfessionalRegisterForm({ role }: { role: ProfessionalR
 
       const session = await login({ phone, password: access.password, role });
 
-      if (!isPrestador) {
+      if (!isEmpresa) {
         const uploads: Promise<unknown>[] = [];
         if (files.profile) uploads.push(uploadProfessionalPhoto(files.profile));
         if (files.vehicle) uploads.push(uploadVehiclePhoto(files.vehicle));
@@ -162,11 +162,11 @@ export default function ProfessionalRegisterForm({ role }: { role: ProfessionalR
     <div className="register-layout">
       <aside className="register-aside">
         <div className="register-aside-badge">Validação profissional</div>
-        <h2>{isPrestador ? 'A empresa opera com dados reais.' : 'Dados reais antes de operar.'}</h2>
-        <p>A candidatura fica pendente até a Administração validar o perfil{isPrestador ? ' da empresa' : ' e a documentação'}.</p>
+        <h2>{isEmpresa ? 'A empresa opera com dados reais.' : 'Dados reais antes de operar.'}</h2>
+        <p>A candidatura fica pendente até a Administração validar o perfil{isEmpresa ? ' da empresa' : ' e a documentação'}.</p>
         <div className="register-process">
           <div className="register-process-step"><span>01</span><div><strong>Acesso</strong><small>Telefone, email e palavra-passe.</small></div></div>
-          <div className="register-process-step"><span>02</span><div><strong>{isPrestador ? 'Dados da empresa' : 'Perfil do entregador'}</strong><small>{isPrestador ? 'Razão social, NIF, atividade e localização.' : 'Documentos, veículo, localidade e experiência.'}</small></div></div>
+          <div className="register-process-step"><span>02</span><div><strong>{isEmpresa ? 'Dados da empresa' : 'Perfil do entregador'}</strong><small>{isEmpresa ? 'Razão social, NIF, atividade e localização.' : 'Documentos, veículo, localidade e experiência.'}</small></div></div>
           <div className="register-process-step"><span>03</span><div><strong>Validação</strong><small>A equipa aprova ou solicita documentos adicionais.</small></div></div>
         </div>
         <div className="register-aside-trust">
@@ -180,8 +180,8 @@ export default function ProfessionalRegisterForm({ role }: { role: ProfessionalR
         <div className="register-card-head">
           <div>
             <span className="register-step-caption">PASSO {step} DE 2</span>
-            <h2>{step === 1 ? 'Dados de acesso' : isPrestador ? 'Dados da empresa' : 'Perfil do entregador'}</h2>
-            <p>{step === 1 ? 'Estes dados serão usados para entrar na plataforma.' : isPrestador ? 'Estes dados identificam a empresa parceira e são enviados ao backend para validação.' : 'Todos os campos são enviados ao backend; as fotografias são guardadas pelo serviço de media da API.'}</p>
+            <h2>{step === 1 ? 'Dados de acesso' : isEmpresa ? 'Dados da empresa' : 'Perfil do entregador'}</h2>
+            <p>{step === 1 ? 'Estes dados serão usados para entrar na plataforma.' : isEmpresa ? 'Estes dados identificam a empresa parceira e são enviados ao backend para validação.' : 'Todos os campos são enviados ao backend; as fotografias são guardadas pelo serviço de media da API.'}</p>
           </div>
           <div className="register-step-indicator" aria-label={`Passo ${step} de 2`}>
             <span className="active" />
@@ -194,12 +194,12 @@ export default function ProfessionalRegisterForm({ role }: { role: ProfessionalR
             <RegisterAccessFields
               form={access}
               update={updateAccess}
-              nameLabel={isPrestador ? 'Responsável pela empresa' : 'Nome completo'}
+              nameLabel={isEmpresa ? 'Responsável pela empresa' : 'Nome completo'}
             />
           </div>
         ) : (
           <div className="register-form-fields">
-            {isPrestador ? (
+            {isEmpresa ? (
               <>
                 <div className="register-section-note">
                   <strong>Identificação da empresa</strong>
@@ -228,6 +228,7 @@ export default function ProfessionalRegisterForm({ role }: { role: ProfessionalR
                       <option value="MOTORCYCLE">Motorizada</option>
                       <option value="CAR">Carro</option>
                       <option value="VAN">Carrinha</option>
+                      <option value="CUPAPATA">Cupapata</option>
                     </select>
                   </div>
                   <div className="field"><label htmlFor="pro-plate">Matrícula</label><input id="pro-plate" className="input" value={profile.vehiclePlate} onChange={(e) => updateProfile('vehiclePlate', e.target.value)} /></div>

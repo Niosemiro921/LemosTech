@@ -9,7 +9,7 @@ import { RealtimeService } from './realtime.service';
 
 @Controller('realtime/orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.CUSTOMER, Role.DRIVER, Role.PRESTADOR)
+@Roles(Role.CUSTOMER, Role.DRIVER)
 export class RealtimeController {
   constructor(private readonly prisma: PrismaService, private readonly realtime: RealtimeService) {}
 

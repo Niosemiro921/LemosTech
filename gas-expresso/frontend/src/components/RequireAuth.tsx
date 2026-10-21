@@ -65,7 +65,7 @@ export function RequireAuth({ children, roles, allowPendingProfessional = false 
   }
   if (!user) return <Navigate to="/login" replace state={{ from }} />;
   if (roles && !roles.includes(user.role)) return <Navigate to={rolePath(user.role)} replace />;
-  if (!allowPendingProfessional && (user.role === 'DRIVER' || user.role === 'PRESTADOR' || user.role === 'SUPPLIER') && user.status !== 'ACTIVE') {
+  if (!allowPendingProfessional && (user.role === 'DRIVER' || user.role === 'SUPPLIER') && user.status !== 'ACTIVE') {
     return <Navigate to="/estado-candidatura" replace />;
   }
   return children;

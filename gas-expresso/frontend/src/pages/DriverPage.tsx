@@ -41,7 +41,7 @@ function isWithinCurrentWeek(value: string, date: Date) {
 
 export default function DriverPage() {
   const navigate = useNavigate();
-  const base = getCurrentUser()?.role === 'PRESTADOR' ? '/prestador' : '/driver';
+  const base = getCurrentUser()?.role === 'SUPPLIER' ? '/fornecedor' : '/driver';
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [offers, setOffers] = useState<DriverOffer[]>([]);
@@ -55,14 +55,13 @@ export default function DriverPage() {
   const [livePoint, setLivePoint] = useState<{ lat: number; lng: number } | null>(null);
   const lastLocationSentAtRef = useRef(0);
 
-  const radiusRaw = Number(import.meta.env.VITE_DRIVER_OFFER_RADIUS_KM);
-  const radiusKm = Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : null;
   const now = new Date();
 
+  // Entregadores independentes vêem todos os pedidos disponíveis na rede,
+  // ordenados apenas por proximidade (sem filtro de raio).
   const nearbyOffers = useMemo(() => {
-    const sorted = [...offers].sort((a, b) => a.distanceToPickupKm - b.distanceToPickupKm);
-    return radiusKm == null ? sorted : sorted.filter(item => item.distanceToPickupKm <= radiusKm);
-  }, [offers, radiusKm]);
+    return [...offers].sort((a, b) => a.distanceToPickupKm - b.distanceToPickupKm);
+  }, [offers]);
 
   const todayNet = useMemo(() => earnings.filter(item => isSameCalendarDay(item.createdAt, now)).reduce((sum, item) => sum + item.net, 0), [earnings, now]);
   const weekNet = useMemo(() => earnings.filter(item => isWithinCurrentWeek(item.createdAt, now)).reduce((sum, item) => sum + item.net, 0), [earnings, now]);
@@ -164,7 +163,7 @@ export default function DriverPage() {
 
   return <div className="page workspace-page driver-page driver-mobile-first">
     <div className="driver-topbar">
-      <div><span className="section-kicker">Painel do entregador</span><h1>{profile ? `Olá, ${profile.fullName}.` : 'Operação de entregas'}</h1><p>{radiusKm != null ? `As ofertas são ordenadas por proximidade dentro do raio operacional configurado.` : 'As ofertas e entregas são sincronizadas diretamente com a API.'}</p></div>
+      <div><span className="section-kicker">Painel do entregador</span><h1>{profile ? `Olá, ${profile.fullName}.` : 'Operação de entregas'}</h1><p>Enquanto estiver online, recebe pedidos disponíveis em toda a rede — independentemente da sua localização.</p></div>
       <button className={`online-toggle ${profile?.isOnline ? 'online' : ''}`} onClick={() => void toggleOnline()} disabled={!profile || busy || profileLoading}><span className="status-dot" /> {profile?.isOnline ? 'Ficar offline' : profileLoading ? 'Carregando...' : 'Ficar online'}</button>
     </div>
     {error && <div className="form-error" role="alert">{error}</div>}

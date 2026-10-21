@@ -17,7 +17,7 @@ import { DriverFinanceService } from '../application/driver-finance.service';
 
 @Controller('drivers/me/wallet')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.DRIVER, Role.PRESTADOR)
+@Roles(Role.DRIVER)
 export class DriverFinanceController {
   constructor(private readonly finance: DriverFinanceService) {}
 

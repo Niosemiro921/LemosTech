@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentUser, rolePath } from '../services/auth';
 import { LogoutButton } from './LogoutButton';
 
-const labels = { CUSTOMER: 'Minha conta', DRIVER: 'Operação', SUPPLIER: 'Fornecedor', PRESTADOR: 'Prestador', ADMIN: 'Administração' } as const;
+const labels = { CUSTOMER: 'Minha conta', DRIVER: 'Operação', SUPPLIER: 'Empresa', ADMIN: 'Administração' } as const;
 
 export function Header() {
   const location = useLocation();

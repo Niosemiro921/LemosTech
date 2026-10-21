@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DeliveryType, OrderStatus, ProductVariant, UserRole } from '@prisma/client';
+import { AccountStatus, DeliveryType, OrderStatus, ProductVariant, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { QuoteOrderDto } from '../dto/quote-order.dto';
@@ -53,10 +53,35 @@ export class OrderService {
   private async calculateQuote(dto: QuoteOrderDto): Promise<OrderQuote> {
     const normalizedItems = this.normalizeItems(dto);
     const variants = await this.loadVariants(normalizedItems.map((item) => item.variantId));
-    const candidate = this.findSupplier(normalizedItems, dto.latitude, dto.longitude, await this.loadCandidates());
+    const candidates = await this.loadCandidates();
+    const candidate = this.findSupplier(normalizedItems, dto.latitude, dto.longitude, candidates);
+
+    // Distinguir problemas: primeiro verificar localização e estoque; depois entregadores.
+    const radius = Number(process.env.DISPATCH_RADIUS_KM ?? '15');
+    const candidatesInRadius = candidates.filter((s) => {
+      const d = this.haversine(dto.latitude, dto.longitude, s.latitude!, s.longitude!);
+      return d <= radius;
+    });
+
+    if (!candidatesInRadius.length) {
+      return { available: false, message: 'Não existe fornecedor ativo com stock suficiente nesta zona.' } as const;
+    }
+
+    const candidatesWithStock = candidatesInRadius.filter((supplier) => normalizedItems.every((item) => (supplier.inventory.find((row) => row.variantId === item.variantId)?.availableQty ?? 0) >= item.quantity));
+
+    if (!candidatesWithStock.length) {
+      return { available: false, message: 'Não existe stock disponível para esta variante nesta zona.' } as const;
+    }
 
     if (!candidate) {
       return { available: false, message: 'Não existe fornecedor ativo com stock suficiente nesta zona.' } as const;
+    }
+
+    // Verificar entregadores ativos e online na plataforma (entregadores independentes)
+    const totalWeightKg = normalizedItems.reduce((sum, item) => sum + (variants.get(item.variantId)?.weightKg ?? 0) * item.quantity, 0);
+    const driversAvailable = await this.checkEligibleDrivers(dto.latitude, dto.longitude, totalWeightKg);
+    if (!driversAvailable) {
+      return { available: false, message: 'Não existem entregadores ativos e online no momento para efetuar a entrega.' } as const;
     }
 
     const subtotal = normalizedItems.reduce((sum, item) => sum + variants.get(item.variantId)!.unitPrice * item.quantity, 0);
@@ -299,7 +324,25 @@ export class OrderService {
   }
 
   private findSupplier(items: Array<{ variantId: string; quantity: number }>, latitude: number, longitude: number, candidates: CandidateSupplier[]) {
-    return [...candidates].filter((supplier) => items.every((item) => (supplier.inventory.find((row) => row.variantId === item.variantId)?.availableQty ?? 0) >= item.quantity)).map((supplier) => ({ ...supplier, distance: this.haversine(latitude, longitude, supplier.latitude, supplier.longitude) })).sort((a, b) => a.distance - b.distance)[0] ?? null;
+    const radius = Number(process.env.DISPATCH_RADIUS_KM ?? '15');
+    const withinRadius = candidates
+      .map((supplier) => ({ ...supplier, distance: this.haversine(latitude, longitude, supplier.latitude, supplier.longitude) }))
+      .filter((supplier) => supplier.distance <= radius);
+    const withStock = withinRadius.filter((supplier) => items.every((item) => (supplier.inventory.find((row) => row.variantId === item.variantId)?.availableQty ?? 0) >= item.quantity));
+    return withStock.sort((a, b) => a.distance - b.distance)[0] ?? null;
+  }
+
+  private async checkEligibleDrivers(latitude: number, longitude: number, totalWeightKg: number): Promise<boolean> {
+    const drivers = await this.prisma.driverProfile.findMany({
+      where: {
+        isOnline: true,
+        user: { status: AccountStatus.ACTIVE, role: { in: [UserRole.DRIVER] } },
+        deliveries: { none: { status: { in: ['ASSIGNED', 'TO_PICKUP', 'AT_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED'] } } },
+      },
+      include: { user: true },
+      take: 50,
+    });
+    return drivers.length > 0;
   }
 
   private normalizeItems(dto: QuoteOrderDto) {

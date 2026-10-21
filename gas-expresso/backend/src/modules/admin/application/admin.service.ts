@@ -23,11 +23,10 @@ export class AdminService {
 
   async getOverview() {
     const expirationLimit = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const [customers, companies, drivers, prestadores, activeOrders, completedOrders, completedRevenue, pendingApplications, incidentsOpen, expiringDocuments] = await Promise.all([
+    const [customers, companies, drivers, activeOrders, completedOrders, completedRevenue, pendingApplications, incidentsOpen, expiringDocuments] = await Promise.all([
       this.prisma.user.count({ where: { role: PrismaUserRole.CUSTOMER } }),
       this.prisma.user.count({ where: { role: PrismaUserRole.SUPPLIER } }),
       this.prisma.user.count({ where: { role: PrismaUserRole.DRIVER } }),
-      this.prisma.user.count({ where: { role: PrismaUserRole.PRESTADOR } }),
       this.prisma.order.count({
         where: {
           status: {
@@ -49,7 +48,7 @@ export class AdminService {
       }),
       this.prisma.user.count({
         where: {
-          role: { in: [PrismaUserRole.DRIVER, PrismaUserRole.PRESTADOR, PrismaUserRole.SUPPLIER] },
+          role: { in: [PrismaUserRole.DRIVER, PrismaUserRole.SUPPLIER] },
           status: { in: [PrismaAccountStatus.PENDING_REVIEW, PrismaAccountStatus.DOCUMENTS_REQUIRED] },
         },
       }),
@@ -67,17 +66,17 @@ export class AdminService {
       this.prisma.walletWithdrawal.count({ where: { status: 'PENDING' } }),
     ]);
     const byStatus = await Promise.all(Object.values(PrismaAccountStatus).map(async (status) => [status, await this.prisma.user.count({ where: { status } })] as const));
-    return { customers, companies, drivers, prestadores, activeOrders, completedOrders, revenue: completedRevenue._sum.total ?? 0, incidentsOpen, pendingApplications, expiringDocuments, walletTopUpsPending, walletWithdrawalsPending, usersByStatus: Object.fromEntries(byStatus), usersByRole: { CUSTOMER: customers, DRIVER: drivers, PRESTADOR: prestadores, SUPPLIER: companies } };
+    return { customers, companies, drivers, activeOrders, completedOrders, revenue: completedRevenue._sum.total ?? 0, incidentsOpen, pendingApplications, expiringDocuments, walletTopUpsPending, walletWithdrawalsPending, usersByStatus: Object.fromEntries(byStatus), usersByRole: { CUSTOMER: customers, DRIVER: drivers, SUPPLIER: companies } };
   }
 
   async listPartners(type?: string) {
-    if (type && ![Role.DRIVER, Role.PRESTADOR, Role.SUPPLIER].includes(type as Role)) {
-      throw new BadRequestException('O tipo de parceiro deve ser DRIVER, PRESTADOR ou SUPPLIER.');
+    if (type && ![Role.DRIVER, Role.SUPPLIER].includes(type as Role)) {
+      throw new BadRequestException('O tipo de parceiro deve ser DRIVER ou SUPPLIER.');
     }
 
     const partners = await this.prisma.user.findMany({
       where: {
-        role: type ? (type as PrismaUserRole) : { in: [PrismaUserRole.DRIVER, PrismaUserRole.PRESTADOR, PrismaUserRole.SUPPLIER] },
+        role: type ? (type as PrismaUserRole) : { in: [PrismaUserRole.DRIVER, PrismaUserRole.SUPPLIER] },
       },
       include: { driver: true, supplier: true },
       orderBy: { createdAt: 'desc' },
@@ -125,7 +124,7 @@ export class AdminService {
         where: { id: userId },
         include: { driver: true, supplier: true },
       });
-      if (!current || !([PrismaUserRole.DRIVER, PrismaUserRole.PRESTADOR, PrismaUserRole.SUPPLIER] as PrismaUserRole[]).includes(current.role)) {
+      if (!current || !([PrismaUserRole.DRIVER, PrismaUserRole.SUPPLIER] as PrismaUserRole[]).includes(current.role)) {
         throw new NotFoundException('Parceiro não encontrado.');
       }
       if (!transition.from.includes(current.status)) {
@@ -249,7 +248,7 @@ export class AdminService {
 
   listApplications(role?: Role, status?: AccountStatus) {
     if (role === Role.CUSTOMER || role === Role.ADMIN) {
-      throw new BadRequestException('A revisão administrativa aceita apenas DRIVER, PRESTADOR ou SUPPLIER.');
+      throw new BadRequestException('A revisão administrativa aceita apenas DRIVER ou SUPPLIER.');
     }
     return this.reviews.listApplications({ role, status });
   }

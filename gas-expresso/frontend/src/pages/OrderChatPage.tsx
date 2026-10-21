@@ -143,9 +143,7 @@ export default function OrderChatPage() {
                   ? '/rastrear'
                   : user?.role === 'SUPPLIER'
                     ? '/fornecedor'
-                    : user?.role === 'PRESTADOR'
-                      ? '/prestador'
-                      : '/driver'
+                    : '/driver'
               }
             >
               ← Voltar ao pedido

@@ -12,7 +12,6 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { RegisterDriverDto } from './dto/register-driver.dto';
 import { RegisterSupplierDto } from './dto/register-supplier.dto';
-import { RegisterPrestadorDto } from './dto/register-prestador.dto';
 import { UpdateCustomerProfileDto } from './dto/update-customer-profile.dto';
 
 @Injectable()
@@ -35,42 +34,6 @@ export class AuthService {
 
   async registerDriver(dto: RegisterDriverDto) {
     return this.registerProfessional(dto);
-  }
-
-  async registerPrestador(dto: RegisterPrestadorDto) {
-    return this.registerUser(dto.phone, dto.email, dto.password, Role.PRESTADOR, AccountStatus.ACTIVE, async (userId) => {
-      // Perfil comercial da empresa: é a informação que a Administração valida.
-      await this.suppliers.create({
-        userId,
-        legalName: dto.legalName.trim(),
-        tradeName: dto.tradeName.trim(),
-        nif: dto.nif.trim(),
-        responsibleName: dto.fullName.trim(),
-        commercialRegistration: dto.commercialRegistration?.trim() || null,
-        activity: dto.activity?.trim() || null,
-        phoneAlt: null,
-        province: dto.province?.trim() || null,
-        municipality: dto.municipality?.trim() || null,
-        neighborhood: dto.neighborhood?.trim() || null,
-        address: dto.address?.trim() || null,
-      });
-
-      // Perfil operacional mínimo: mantém a área do prestador (ofertas, carteira e entregas) funcional.
-      await this.drivers.create({
-        userId,
-        fullName: dto.fullName.trim(),
-        documentNumber: dto.nif.trim(),
-        nif: dto.nif.trim(),
-        vehicleType: dto.vehicleType?.trim() || 'MOTORCYCLE',
-        vehiclePlate: dto.vehiclePlate?.trim() || null,
-        experienceYears: dto.experienceYears ?? 0,
-        province: dto.province?.trim() || null,
-        municipality: dto.municipality?.trim() || null,
-        neighborhood: dto.neighborhood?.trim() || null,
-        address: dto.address?.trim() || null,
-        vehicleCapacityKg: dto.vehicleCapacityKg ?? 45,
-      });
-    });
   }
 
   async registerSupplier(dto: RegisterSupplierDto) {

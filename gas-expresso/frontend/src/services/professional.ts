@@ -10,3 +10,6 @@ export interface ProfessionalProfile {
 }
 export const fetchProfessionalProfile = () => apiGet<ProfessionalProfile>('/drivers/me/profile');
 export const updateProfessionalProfile = (input: Partial<ProfessionalProfile>) => apiPatch<ProfessionalProfile>('/drivers/me/profile', input);
+export const fetchSupplierProfile = () => apiGet<SupplierProfile>('/suppliers/me/profile');
+export interface SupplierProfile { id: string; userId: string; legalName: string; tradeName: string; nif: string; commercialRegistration?: string|null; activity?: string|null; responsibleName: string; phoneAlt?: string|null; province?: string|null; municipality?: string|null; neighborhood?: string|null; address?: string|null; photoUrl?: string|null; latitude?: number|null; longitude?: number|null; user?: { status: string; phone: string; email?: string|null }; }
+export const updateSupplierProfile = (input: Partial<SupplierProfile>) => apiPatch<SupplierProfile>('/suppliers/me/profile', input);

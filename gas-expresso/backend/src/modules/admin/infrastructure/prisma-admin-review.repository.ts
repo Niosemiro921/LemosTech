@@ -54,9 +54,9 @@ export class PrismaAdminReviewRepository extends AdminReviewRepositoryPort {
         }
       : null;
 
-    // O Prestador é uma empresa parceira: a validação mostra os dados da empresa.
+    // A empresa parceira: a validação mostra os dados da empresa.
     const preferCompany = Boolean(companyProfile) &&
-      (user.role === PrismaRole.PRESTADOR || user.role === PrismaRole.SUPPLIER || !driverProfile);
+      (user.role === PrismaRole.DRIVER || user.role === PrismaRole.SUPPLIER || !driverProfile);
 
     const profile: ReviewApplicationRecord['profile'] =
       (preferCompany ? companyProfile : driverProfile) ??
@@ -99,7 +99,6 @@ export class PrismaAdminReviewRepository extends AdminReviewRepositoryPort {
           : {
               in: [
                 PrismaRole.DRIVER,
-                PrismaRole.PRESTADOR,
                 PrismaRole.SUPPLIER,
               ],
             },
@@ -150,7 +149,6 @@ export class PrismaAdminReviewRepository extends AdminReviewRepositoryPort {
     // enquanto user.role é UserRole completo.
     if (
       user.role !== PrismaRole.DRIVER &&
-      user.role !== PrismaRole.PRESTADOR &&
       user.role !== PrismaRole.SUPPLIER
     ) {
       return null;

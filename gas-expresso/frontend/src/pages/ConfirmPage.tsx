@@ -6,7 +6,7 @@ import { createQuote, type QuotePricingView } from '../services/quote';
 import { extractMessage } from '../services/auth';
 import { useOrderStore } from '../stores/orderStore';
 import { ORDER_KIND_META } from '../services/orderKinds';
-import { normalizeOrderKind } from '../types/gas';
+import { normalizeOrderKind, REQUESTED_VEHICLE_OPTIONS } from '../types/gas';
 
 export default function ConfirmPage() {
   const navigate = useNavigate();
@@ -14,6 +14,7 @@ export default function ConfirmPage() {
     selectedProduct,
     quantity,
     deliveryType,
+    requestedVehicleType,
     address,
     scheduledAt,
     changeForAmount,
@@ -53,6 +54,7 @@ export default function ConfirmPage() {
       deliveryAddress: address.address,
       scheduledAt,
       bottleExchangeType: orderKind,
+      requestedVehicleType,
     })
       .then((result) => {
         if (current) {
@@ -69,7 +71,7 @@ export default function ConfirmPage() {
     return () => {
       current = false;
     };
-  }, [navigate, selectedProduct, quantity, deliveryType, address, scheduledAt, orderKind]);
+  }, [navigate, selectedProduct, quantity, deliveryType, requestedVehicleType, address, scheduledAt, orderKind]);
 
   if (!selectedProduct || !address) return null;
   const product = selectedProduct;
@@ -104,6 +106,7 @@ export default function ConfirmPage() {
         bottleBrand,
         valveType,
         deliveryNotes,
+        requestedVehicleType,
       });
       sessionStorage.removeItem('gas-expresso-order-idempotency');
       navigate(`/pagamento?orderId=${encodeURIComponent(order.id)}`, { replace: true });
@@ -156,6 +159,10 @@ export default function ConfirmPage() {
             <small style={{ fontWeight: 600, color: 'var(--text-dark, #1e293b)' }}>{deliveryNotes}</small>
           </div>
         )}
+        <div className="confirm-row">
+          <span>Veículo preferido</span>
+          <strong>{REQUESTED_VEHICLE_OPTIONS.find((option) => option.value === requestedVehicleType)?.label ?? 'Motorizada'}</strong>
+        </div>
         <div className="confirm-row">
           <span>Entrega</span>
           <strong>{deliveryType === 'express' ? '⚡ Expressa' : '📅 Programada'}</strong>

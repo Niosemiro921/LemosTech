@@ -1,5 +1,5 @@
-export type RegisterRole = 'CUSTOMER' | 'DRIVER' | 'SUPPLIER' | 'PRESTADOR';
-export type ProfessionalRegisterRole = Exclude<RegisterRole, 'CUSTOMER' | 'SUPPLIER'>;
+export type RegisterRole = 'CUSTOMER' | 'DRIVER' | 'SUPPLIER';
+export type ProfessionalRegisterRole = Exclude<RegisterRole, 'CUSTOMER'>;
 
 export interface RegisterConfig {
   title: string;
@@ -8,7 +8,7 @@ export interface RegisterConfig {
   professional: boolean;
 }
 
-/** Só aparecem aqui os perfis com endpoint de registo confirmado no backend actual. */
+/** Perfis que aparecem nas opções públicas de cadastro. */
 export const registerRoles: RegisterRole[] = ['CUSTOMER', 'DRIVER', 'SUPPLIER'];
 
 export const registerConfigs: Record<RegisterRole, RegisterConfig> = {
@@ -26,14 +26,8 @@ export const registerConfigs: Record<RegisterRole, RegisterConfig> = {
   },
   SUPPLIER: {
     title: 'Traga a sua empresa para a rede.',
-    subtitle: 'Registe a empresa, o NIF e o responsável. A equipa valida a candidatura antes da operação.',
-    label: 'Empresa / Fornecedor',
-    professional: true,
-  },
-  PRESTADOR: {
-    title: 'Perfil de prestador independente.',
-    subtitle: 'Este perfil só poderá ser registado quando existir um papel e endpoint próprios no backend.',
-    label: 'Prestador',
+    subtitle: 'Registe os dados da empresa parceira e aguarde a validação antes de operar entregas.',
+    label: 'Empresa',
     professional: true,
   },
 };
@@ -41,18 +35,18 @@ export const registerConfigs: Record<RegisterRole, RegisterConfig> = {
 export const roleSlugs: Record<RegisterRole, string> = {
   CUSTOMER: 'customer',
   DRIVER: 'driver',
-  SUPPLIER: 'supplier',
-  PRESTADOR: 'prestador',
+  SUPPLIER: 'empresa',
 };
 
 export function normalizeRegisterRole(raw?: string): RegisterRole {
   const value = (raw ?? '').toUpperCase();
   if (value === 'DRIVER' || value === 'ENTREGADOR') return 'DRIVER';
+  // A Empresa é o perfil público das empresas parceiras; os links antigos continuam válidos.
   if (value === 'SUPPLIER' || value === 'EMPRESA' || value === 'FORNECEDOR') return 'SUPPLIER';
-  if (value === 'PRESTADOR') return 'PRESTADOR';
   return 'CUSTOMER';
 }
 
+/** Dados de acesso usados por todos os perfis (passo 1). */
 export interface AccessForm {
   name: string;
   phone: string;
@@ -76,8 +70,9 @@ export function passwordScore(password: string): number {
   return rules.reduce((score, rule) => score + (new RegExp(rule).test(password) ? 1 : 0), 0);
 }
 
+/** Devolve uma mensagem de erro ou '' quando os dados de acesso são válidos. */
 export function validateAccessForm(form: AccessForm): string {
-  if (form.name.trim().length < 2) return 'Introduza o nome completo ou o nome do responsável.';
+  if (form.name.trim().length < 2) return 'Introduza o nome completo.';
   if (form.phone.replace(/\D/g, '').length < 9) return 'Introduza um telefone angolano válido.';
   if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) return 'Verifique o email.';
   if (form.password.length < 10) return 'A palavra-passe deve ter pelo menos 10 caracteres.';

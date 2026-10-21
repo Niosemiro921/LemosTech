@@ -136,7 +136,7 @@ export default function ProfilePage() {
             </>}
             <LogoutButton />
           </article>
-          <article className="profile-panel profile-help-panel"><span className="profile-help-icon">?</span><div><strong>Precisa de ajuda?</strong><p>A nossa equipa poderá acompanhar pedidos, entregas e ocorrências.</p></div><Link to="/" className="text-link">Falar com suporte →</Link></article>
+          <article className="profile-panel profile-help-panel"><span className="profile-help-icon">?</span><div><strong>Precisa de ajuda?</strong><p>A nossa equipa poderá acompanhar pedidos, entregas e ocorrências.</p></div><Link to="/suporte" className="text-link">Falar com suporte →</Link></article>
         </aside>
       </section>
     </div>

@@ -150,7 +150,7 @@ export class OperationsService {
   async createIncident(userId: string, dto: CreateIncidentDto) {
     const user = await this.requirePartner(userId);
     if (dto.orderId) {
-      const orderWhere = ([UserRole.DRIVER, UserRole.PRESTADOR] as UserRole[]).includes(user.role)
+      const orderWhere = ([UserRole.DRIVER] as UserRole[]).includes(user.role)
         ? {
             id: dto.orderId,
             OR: [
@@ -313,7 +313,7 @@ export class OperationsService {
 
   private async requirePartner(userId: string) {
     const user = await this.requireAccount(userId);
-    if (user.role !== UserRole.DRIVER && user.role !== UserRole.PRESTADOR && user.role !== UserRole.SUPPLIER) {
+    if (user.role !== UserRole.DRIVER && user.role !== UserRole.SUPPLIER) {
       throw new NotFoundException('Perfil de parceiro não encontrado.');
     }
     return user;

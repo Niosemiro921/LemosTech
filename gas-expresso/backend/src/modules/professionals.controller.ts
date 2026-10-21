@@ -15,11 +15,11 @@ export class ProfessionalsController {
   constructor(private readonly drivers: DriverRepositoryPort, private readonly suppliers: SupplierRepositoryPort) {}
 
   @Get('drivers/me/profile')
-  @Roles(Role.DRIVER, Role.PRESTADOR)
+  @Roles(Role.DRIVER)
   driverProfile(@Req() req: Request & { user: { sub: string } }) { return this.drivers.getByUserId(req.user.sub); }
 
   @Patch('drivers/me/profile')
-  @Roles(Role.DRIVER, Role.PRESTADOR)
+  @Roles(Role.DRIVER)
   driverProfileUpdate(@Req() req: Request & { user: { sub: string } }, @Body() dto: UpdateDriverProfileDto) {
     return this.drivers.updateByUserId(req.user.sub, {
       ...dto,

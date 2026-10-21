@@ -1,74 +1,182 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { extractMessage } from '../services/auth';
-import { formatAOA } from '../services/catalog';
 import { fetchSupplierInventory, updateSupplierInventory, type SupplierInventoryItem } from '../services/supplier';
+import { fetchSupplierDashboard } from '../services/supplierBusiness';
+import { formatAOA, fetchGasProducts } from '../services/catalog';
+
+type Dashboard = { inventoryUnits: number; sales: number; orders: number; lowStock: number; pendingInvoices: number; currency: string; monthlySales?: Array<{ month: string; amount: number }> };
 
 export default function SupplierStockPage() {
   const [items, setItems] = useState<SupplierInventoryItem[]>([]);
-  const [values, setValues] = useState<Record<string, { available: string; minimum: string; note: string }>>({});
-  const [query, setQuery] = useState('');
-  const [lowOnly, setLowOnly] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [newVariant, setNewVariant] = useState('');
+  const [newQty, setNewQty] = useState('');
+  const [newNote, setNewNote] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [dash, setDash] = useState<Dashboard | null>(null);
+  const [variants, setVariants] = useState<Array<{ id: string; label: string; description: string; price: number }>>([]);
 
   async function load() {
     setLoading(true);
     try {
-      const data = await fetchSupplierInventory();
+      const [data, d, catalog] = await Promise.all([fetchSupplierInventory(), fetchSupplierDashboard(), fetchGasProducts()]);
       setItems(data);
-      setValues(Object.fromEntries(data.map((item) => [item.variantId, { available: String(item.availableQty), minimum: String(item.reorderLevel), note: '' }])));
+      setValues(Object.fromEntries(data.map(i => [i.variantId, String(i.availableQty)])));
+      setDash(d as unknown as Dashboard);
+      setVariants(catalog.map(p => ({ id: p.id, label: p.label, description: p.description, price: p.price })));
       setError('');
-    } catch (cause) {
-      setError(extractMessage(cause, 'Não foi possível carregar o stock.'));
-    } finally { setLoading(false); }
+    } catch (e) {
+      setError(extractMessage(e, 'Não foi possível carregar o stock.'));
+    } finally {
+      setLoading(false);
+    }
   }
+
   useEffect(() => { void load(); }, []);
 
-  const filtered = useMemo(() => items.filter((item) => {
-    const matchesQuery = `${item.variant.name} ${item.variant.sku} ${item.variant.product?.name ?? ''}`.toLowerCase().includes(query.trim().toLowerCase());
-    return matchesQuery && (!lowOnly || item.availableQty <= item.reorderLevel);
-  }), [items, query, lowOnly]);
-  const lowStock = items.filter((item) => item.availableQty <= item.reorderLevel).length;
-  const totalAvailable = items.reduce((sum, item) => sum + item.availableQty, 0);
-  const totalReserved = items.reduce((sum, item) => sum + item.reservedQty, 0);
-
-  function edit(variantId: string, key: 'available' | 'minimum' | 'note', value: string) {
-    setValues((current) => ({ ...current, [variantId]: { ...(current[variantId] ?? { available: '', minimum: '', note: '' }), [key]: value } }));
-    setSuccess('');
-  }
-
   async function save(item: SupplierInventoryItem) {
-    const value = values[item.variantId] ?? { available: String(item.availableQty), minimum: String(item.reorderLevel), note: '' };
-    const availableQty = Number(value.available);
-    const reorderLevel = Number(value.minimum);
-    if (!Number.isInteger(availableQty) || availableQty < item.reservedQty) { setError(`O stock disponível de ${item.variant.name} deve ser um inteiro e não pode ser inferior às ${item.reservedQty} unidades reservadas.`); return; }
-    if (!Number.isInteger(reorderLevel) || reorderLevel < 0) { setError('O nível mínimo deve ser um número inteiro igual ou superior a zero.'); return; }
-    if (availableQty !== item.availableQty && value.note.trim().length < 3) { setError('Indique o motivo para alterar a quantidade de stock.'); return; }
-    setBusy(item.variantId); setError(''); setSuccess('');
+    const availableQty = Number(values[item.variantId]);
+    if (!Number.isInteger(availableQty) || availableQty < item.reservedQty) {
+      setError('A quantidade disponível deve ser inteira e não pode ficar abaixo do stock reservado.');
+      return;
+    }
+    setBusy(item.variantId);
+    setError('');
     try {
-      await updateSupplierInventory(item.variantId, availableQty, reorderLevel, value.note);
-      setSuccess(`Stock de ${item.variant.name} actualizado.`);
+      await updateSupplierInventory(item.variantId, availableQty, item.reorderLevel);
       await load();
-    } catch (cause) { setError(extractMessage(cause, 'Não foi possível actualizar o stock.')); }
-    finally { setBusy(null); }
+    } catch (e) {
+      setError(extractMessage(e, 'Não foi possível atualizar o stock.'));
+    } finally {
+      setBusy(null);
+    }
   }
 
-  return <div className="supplier-module-page page">
-    <header className="workspace-heading"><div><span className="section-kicker">ERP · INVENTÁRIO</span><h1>Stock operacional</h1><p>Actualize quantidades e níveis mínimos. As reservas de pedidos são protegidas pelo servidor.</p></div><button className="secondary-btn" onClick={() => void load()} disabled={loading}>↻ Actualizar</button></header>
-    {error && <div className="form-error" role="alert">{error}</div>}{success && <div className="success-alert" role="status">{success}</div>}
-    {loading ? <div className="loading-panel" role="status">A carregar inventário da empresa…</div> : <>
-      <div className="supplier-kpi-grid supplier-stock-metrics"><article><small>Referências de produto</small><strong>{items.length}</strong><span>Variações devolvidas pela API</span></article><article><small>Unidades disponíveis</small><strong>{totalAvailable}</strong><span>Saldo operacional de stock</span></article><article><small>Unidades reservadas</small><strong>{totalReserved}</strong><span>Associadas a pedidos em curso</span></article><article className={lowStock ? 'alert-kpi' : ''}><small>Alertas de stock</small><strong>{lowStock}</strong><span>Disponível ≤ nível mínimo</span></article></div>
-      <section className="workspace-panel"><div className="supplier-filter-tools"><label className="supplier-search-field"><span>Pesquisar produto</span><input className="input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome ou SKU" /></label><label className="supplier-checkbox-filter"><input type="checkbox" checked={lowOnly} onChange={(event) => setLowOnly(event.target.checked)}/> Mostrar apenas alertas de stock</label></div>
-      {filtered.length ? <div className="supplier-stock-list">{filtered.map((item) => { const value = values[item.variantId] ?? { available: String(item.availableQty), minimum: String(item.reorderLevel), note: '' }; const changed = Number(value.available) !== item.availableQty || Number(value.minimum) !== item.reorderLevel; const low = item.availableQty <= item.reorderLevel; return <article className="supplier-stock-row" key={item.id}>
-        <div className="supplier-stock-product"><div className="supplier-stock-product-icon">{item.variant.weightKg}kg</div><div><strong>{item.variant.name}</strong><small>{item.variant.product?.name || 'GPL'} · SKU {item.variant.sku}</small><span className={`status-pill ${low ? 'warning' : 'success'}`}>{low ? 'Stock baixo' : 'Disponível'}</span></div></div>
-        <div className="supplier-stock-field"><label htmlFor={`available-${item.variantId}`}>Disponível</label><input id={`available-${item.variantId}`} className="input" type="number" min={item.reservedQty} step="1" value={value.available} onChange={(event) => edit(item.variantId, 'available', event.target.value)} /><small>{item.reservedQty} reservadas</small></div>
-        <div className="supplier-stock-field"><label htmlFor={`minimum-${item.variantId}`}>Alerta mínimo</label><input id={`minimum-${item.variantId}`} className="input" type="number" min="0" step="1" value={value.minimum} onChange={(event) => edit(item.variantId, 'minimum', event.target.value)} /><small>Preço: {formatAOA(item.variant.unitPrice)}</small></div>
-        <div className="supplier-stock-action"><label htmlFor={`note-${item.variantId}`}>Motivo do ajuste</label><input id={`note-${item.variantId}`} className="input" value={value.note} onChange={(event) => edit(item.variantId, 'note', event.target.value)} placeholder="Obrigatório se mudar a quantidade" /><button className="primary-btn small" disabled={!changed || busy === item.variantId} onClick={() => void save(item)}>{busy === item.variantId ? 'A guardar…' : 'Guardar alteração'}</button></div>
-      </article>; })}</div> : <div className="empty-state"><h2>{items.length ? 'Nenhum resultado' : 'Ainda sem inventário'}</h2><p>{items.length ? 'Altere a pesquisa ou desactive o filtro de alertas.' : 'O inventário desta empresa ainda não contém referências. O cadastro inicial de inventário de produtos deve ser feito pela operação autorizada.'}</p></div>}
-      <div className="supplier-api-note"><strong>Histórico de movimentos</strong><p>O backend regista os ajustes feitos nesta página, mas ainda não expõe um endpoint de consulta ao livro de movimentos. O histórico não é simulado e será apresentado quando existir essa API.</p></div>
-      </section>
-    </>}
-  </div>;
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    const qty = Number(newQty);
+    const selectedVariant = variants.find(v => v.id === newVariant);
+    if (!newVariant) { setError('Selecione uma variante válida do catálogo.'); return; }
+    if (!selectedVariant) { setError('Variante não encontrada no catálogo.'); return; }
+    if (!Number.isInteger(qty) || qty < 0) { setError('A quantidade deve ser um número inteiro positivo.'); return; }
+    setCreating(true); setError('');
+    try {
+      const existing = items.find(i => i.variantId === newVariant);
+      const targetQty = existing ? existing.availableQty + qty : qty;
+      const reorderLevel = existing ? existing.reorderLevel : 5;
+      const note = newNote.trim() || (existing ? `Entrada de ${qty} unidade(s).` : `Entrada inicial de ${qty} unidade(s).`);
+      await updateSupplierInventory(newVariant, targetQty, reorderLevel, note);
+      setNewVariant(''); setNewQty(''); setNewNote(''); setShowCreate(false);
+      await load();
+    } catch (e) {
+      setError(extractMessage(e, 'Não foi possível criar o item de stock. Verifique se a variante existe.'));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  const totalAvailable = items.reduce((s, i) => s + i.availableQty, 0);
+  const totalReserved = items.reduce((s, i) => s + i.reservedQty, 0);
+  const totalValue = items.reduce((s, i) => s + i.availableQty * i.variant.unitPrice, 0);
+  const monthlyEstimate = dash?.monthlySales?.slice(-1)?.[0]?.amount ?? dash?.sales ?? 0;
+
+  return (
+    <div className="page workspace-page supplier-module-page">
+      <div className="workspace-heading">
+        <div>
+          <span className="section-kicker">ERP / Stock</span>
+          <h1>Stock operacional.</h1>
+          <p>O fornecedor controla disponibilidade, entrada e saída de produtos. Registe novas entradas e veja o que sobrou.</p>
+        </div>
+        <button className="secondary-btn" onClick={() => void load()} disabled={loading}>Atualizar</button>
+        <button className="primary-btn" onClick={() => setShowCreate(s => !s)}>
+          {showCreate ? 'Cancelar' : 'Criar / Registar item'}
+        </button>
+      </div>
+
+      {showCreate && (
+        <section className="workspace-panel" style={{ marginBottom: '1.5rem' }}>
+          <h3>Criar / Registar item de stock</h3>
+          <form onSubmit={handleCreate} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'end' }}>
+            <div>
+              <label htmlFor="new-variant">Produto / Variante <small>(obrigatório)</small></label>
+              <select id="new-variant" className="input" value={newVariant} onChange={e => setNewVariant(e.target.value)} required>
+                <option value="">Selecione...</option>
+                {variants.map(v => <option key={v.id} value={v.id}>{v.label} — {v.description || '—'} ({formatAOA(v.price)})</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="new-qty">Quantidade de entrada</label>
+              <input id="new-qty" className="input" type="number" min="0" step="1" value={newQty} onChange={e => setNewQty(e.target.value)} placeholder="0" required />
+            </div>
+            <div>
+              <label htmlFor="new-note">Nota (motivo)</label>
+              <input id="new-note" className="input" value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Entrada de produto..." />
+            </div>
+            <button className="primary-btn" type="submit" disabled={creating}>{creating ? 'A guardar...' : 'Registar entrada'}</button>
+          </form>
+        </section>
+      )}
+
+      {error && <div className="form-error" role="alert"><strong>Erro:</strong> {error}</div>}
+
+      {loading ? <div className="loading-panel">A carregar inventário…</div> : items.length ? (
+        <>
+          <section className="workspace-panel">
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr><th>Produto</th><th>SKU</th><th>Disponível</th><th>Reservado</th><th>Mínimo</th><th>Preço unitário</th><th>Acção</th></tr>
+                </thead>
+                <tbody>
+                  {items.map(item => (
+                    <tr key={item.id}>
+                      <td><strong>{item.variant.name}</strong></td>
+                      <td>{item.variant.sku}</td>
+                      <td>
+                        <input className="table-number-input" type="number" min={item.reservedQty}
+                          value={values[item.variantId] ?? item.availableQty}
+                          onChange={e => setValues(v => ({ ...v, [item.variantId]: e.target.value }))} />
+                      </td>
+                      <td>{item.reservedQty}</td>
+                      <td>{item.reorderLevel}</td>
+                      <td>{formatAOA(item.variant.unitPrice)}</td>
+                      <td>
+                        <button className="tiny-btn" disabled={busy === item.variantId} onClick={() => void save(item)}>
+                          {busy === item.variantId ? 'A guardar…' : 'Guardar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="workspace-panel" style={{ marginTop: '1.5rem' }}>
+            <h3>Relatório de stock — o que sobrou</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+              <article><small>Itens no inventário</small><strong>{items.length}</strong><span>Produtos registados</span></article>
+              <article><small>Disponível (total)</small><strong>{totalAvailable}</strong><span>Unidades em armazém</span></article>
+              <article><small>Reservado</small><strong>{totalReserved}</strong><span>Associadas a pedidos</span></article>
+              <article><small>Valor em stock</small><strong>{formatAOA(totalValue)}</strong><span>Estimativa pelo preço unitário</span></article>
+              <article><small>Vendas / mês (aprox.)</small><strong>{formatAOA(monthlyEstimate)}</strong><span>Com base nos últimos dados</span></article>
+            </div>
+            <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#f8fcf6', borderRadius: '8px' }}>
+              <strong>Nota:</strong> Quando os produtos saem (pedidos entregues), a quantidade disponível reduz automaticamente. O valor mensal é uma estimativa baseada nas vendas registadas no painel do fornecedor.
+            </div>
+          </section>
+        </>
+      ) : (
+        <div className="empty-state">
+          <h2>Stock vazio</h2>
+          <p>A API não devolveu produtos para esta empresa. Use o botão <strong>Criar / Registar item</strong> acima para adicionar o primeiro produto.</p>
+        </div>
+      )}
+    </div>
+  );
 }

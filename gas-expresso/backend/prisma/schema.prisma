@@ -10,7 +10,6 @@ datasource db {
 enum UserRole {
   CUSTOMER
   DRIVER
-  PRESTADOR
   SUPPLIER
   ADMIN
 }

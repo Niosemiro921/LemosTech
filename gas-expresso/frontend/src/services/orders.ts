@@ -1,5 +1,5 @@
 import { apiPost } from '../lib/api';
-import { normalizeOrderKind, type DeliveryType, type GasProduct, type OrderKind } from '../types/gas';
+import { normalizeOrderKind, type DeliveryType, type GasProduct, type OrderKind, type RequestedVehicleType } from '../types/gas';
 
 export interface CustomerOrder {
   id: string;
@@ -27,6 +27,7 @@ export async function createCustomerOrder(input: {
   bottleBrand?: string;
   valveType?: string;
   deliveryNotes?: string;
+  requestedVehicleType?: RequestedVehicleType;
 }): Promise<CustomerOrder> {
   return apiPost<CustomerOrder>(
     '/orders',
@@ -41,6 +42,7 @@ export async function createCustomerOrder(input: {
       bottleExchangeType: normalizeOrderKind(input.bottleExchangeType),
       bottleBrand: input.bottleBrand ?? 'Sonangol',
       valveType: input.valveType ?? 'QUICK_20MM',
+      ...(input.requestedVehicleType ? { requestedVehicleType: input.requestedVehicleType } : {}),
       ...(input.deliveryNotes ? { deliveryNotes: input.deliveryNotes } : {}),
       acceptEstimatedPrice: true,
     },

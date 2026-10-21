@@ -12,7 +12,7 @@ type ReqUser = Request & { user: { sub: string } };
 
 @Controller('chat/orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.CUSTOMER, Role.DRIVER, Role.PRESTADOR)
+@Roles(Role.CUSTOMER, Role.DRIVER)
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
 

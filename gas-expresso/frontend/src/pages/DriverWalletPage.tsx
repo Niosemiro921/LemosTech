@@ -7,7 +7,7 @@ import { fetchDriverWallet, fetchPriorityPolicy, fetchWalletTransactions, fetchD
 const statusLabel: Record<string, string> = { PENDING: 'Pendente', APPROVED: 'Aprovado', PAID: 'Pago', REJECTED: 'Rejeitado', FAILED: 'Falhou' };
 
 export default function DriverWalletPage() {
-  const base = getCurrentUser()?.role === 'PRESTADOR' ? '/prestador' : '/driver';
+  const base = getCurrentUser()?.role === 'SUPPLIER' ? '/fornecedor' : '/driver';
   const [wallet, setWallet] = useState<DriverWallet | null>(null);
   const [tx, setTx] = useState<WalletTransaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<DriverWithdrawalRequest[]>([]);

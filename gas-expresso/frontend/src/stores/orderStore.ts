@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { normalizeOrderKind, type DeliveryAddress, type DeliveryType, type GasProduct, type OrderKind } from '../types/gas';
+import { normalizeOrderKind, type DeliveryAddress, type DeliveryType, type GasProduct, type OrderKind, type RequestedVehicleType } from '../types/gas';
 
 interface OrderState {
   selectedProduct: GasProduct | null;
   quantity: number;
   address: DeliveryAddress | null;
   deliveryType: DeliveryType;
+  requestedVehicleType: RequestedVehicleType;
   scheduledAt: string | null;
   changeForAmount: number | null;
   bottleExchangeType: OrderKind;
@@ -14,8 +15,9 @@ interface OrderState {
   deliveryNotes: string;
   setProduct: (product: GasProduct) => void;
   setQuantity: (quantity: number) => void;
-  setAddress: (address: DeliveryAddress | null) => void;
+  setAddress: (address: DeliveryAddress) => void;
   setDeliveryType: (type: DeliveryType) => void;
+  setRequestedVehicleType: (type: RequestedVehicleType) => void;
   setScheduledAt: (value: string | null) => void;
   setChangeForAmount: (value: number | null) => void;
   setBottleExchangeType: (value: OrderKind) => void;
@@ -30,6 +32,7 @@ export const useOrderStore = create<OrderState>((set) => ({
   quantity: 1,
   address: null,
   deliveryType: 'express',
+  requestedVehicleType: 'MOTORCYCLE',
   scheduledAt: null,
   changeForAmount: null,
   bottleExchangeType: 'REFILL_EXCHANGE',
@@ -39,10 +42,8 @@ export const useOrderStore = create<OrderState>((set) => ({
   setProduct: (selectedProduct) => set({ selectedProduct }),
   setQuantity: (quantity) => set({ quantity: Math.max(1, Math.min(20, quantity)) }),
   setAddress: (address) => set({ address }),
-  setDeliveryType: (deliveryType) => set((state) => ({
-    deliveryType,
-    ...(deliveryType === 'express' ? { scheduledAt: null } : { scheduledAt: state.scheduledAt }),
-  })),
+  setDeliveryType: (deliveryType) => set({ deliveryType, scheduledAt: null }),
+  setRequestedVehicleType: (requestedVehicleType) => set({ requestedVehicleType }),
   setScheduledAt: (scheduledAt) => set({ scheduledAt }),
   setChangeForAmount: (changeForAmount) => set({ changeForAmount }),
   setBottleExchangeType: (value) => set({ bottleExchangeType: normalizeOrderKind(value) }),
@@ -55,6 +56,7 @@ export const useOrderStore = create<OrderState>((set) => ({
       quantity: 1,
       address: null,
       deliveryType: 'express',
+      requestedVehicleType: 'MOTORCYCLE',
       scheduledAt: null,
       changeForAmount: null,
       bottleExchangeType: 'REFILL_EXCHANGE',

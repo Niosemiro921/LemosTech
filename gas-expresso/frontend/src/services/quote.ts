@@ -1,5 +1,5 @@
 import { apiPost } from '../lib/api';
-import type { DeliveryType, GasProduct, OrderKind } from '../types/gas';
+import type { DeliveryType, GasProduct, OrderKind, RequestedVehicleType } from '../types/gas';
 
 export type BackendDeliveryType = 'EXPRESS' | 'SCHEDULED';
 
@@ -75,6 +75,7 @@ export async function createQuote(params: {
   deliveryAddress: string;
   scheduledAt?: string | null;
   bottleExchangeType?: OrderKind;
+  requestedVehicleType?: RequestedVehicleType;
 }): Promise<QuotePricingView> {
   const items: QuoteRequestItem[] = [{ variantId: params.product.id, quantity: params.quantity }];
   const payload = {
@@ -84,6 +85,7 @@ export async function createQuote(params: {
     latitude: params.latitude,
     longitude: params.longitude,
     bottleExchangeType: params.bottleExchangeType ?? 'REFILL_EXCHANGE',
+    ...(params.requestedVehicleType ? { requestedVehicleType: params.requestedVehicleType } : {}),
     ...(params.scheduledAt ? { scheduledAt: params.scheduledAt } : {}),
   };
   const response = await apiPost<QuoteResponse>('/orders/quote', payload, { requireAuth: false });

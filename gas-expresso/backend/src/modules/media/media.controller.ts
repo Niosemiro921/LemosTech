@@ -22,7 +22,7 @@ export class MediaController {
   constructor(private readonly media: MediaService, private readonly drivers: DriverRepositoryPort, private readonly suppliers: SupplierRepositoryPort) {}
 
   @Post('drivers/me/photo')
-  @Roles(Role.DRIVER, Role.PRESTADOR)
+  @Roles(Role.DRIVER)
   @UseInterceptors(FileInterceptor('file'))
   async driverPhoto(@Req() req: Request & { user: { sub: string } }, @UploadedFile() file?: UploadedFilePayload) {
     if (!file) throw new BadRequestException('Selecione uma fotografia.');
@@ -31,7 +31,7 @@ export class MediaController {
   }
 
   @Post('drivers/me/vehicle-photo')
-  @Roles(Role.DRIVER, Role.PRESTADOR)
+  @Roles(Role.DRIVER)
   @UseInterceptors(FileInterceptor('file'))
   async vehiclePhoto(@Req() req: Request & { user: { sub: string } }, @UploadedFile() file?: UploadedFilePayload) {
     if (!file) throw new BadRequestException('Selecione uma fotografia do veículo.');
@@ -40,7 +40,7 @@ export class MediaController {
   }
 
   @Post('drivers/me/license-photo')
-  @Roles(Role.DRIVER, Role.PRESTADOR)
+  @Roles(Role.DRIVER)
   @UseInterceptors(FileInterceptor('file'))
   async licensePhoto(@Req() req: Request & { user: { sub: string } }, @UploadedFile() file?: UploadedFilePayload) {
     if (!file) throw new BadRequestException('Selecione a fotografia da carteira de motorista.');

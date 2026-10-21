@@ -190,7 +190,7 @@ export class DriverFinanceService {
   private async getProfessional(userId: string) {
     const driver = await this.prisma.driverProfile.findUnique({ where: { userId }, include: { user: { select: { role: true, status: true } } } });
     if (!driver) throw new NotFoundException('Perfil profissional não encontrado.');
-    if (!([UserRole.DRIVER, UserRole.PRESTADOR] as UserRole[]).includes(driver.user.role) || driver.user.status !== AccountStatus.ACTIVE) throw new ConflictException('O profissional ainda não está autorizado a operar.');
+    if (!([UserRole.DRIVER] as UserRole[]).includes(driver.user.role) || driver.user.status !== AccountStatus.ACTIVE) throw new ConflictException('O profissional ainda não está autorizado a operar.');
     return driver;
   }
 

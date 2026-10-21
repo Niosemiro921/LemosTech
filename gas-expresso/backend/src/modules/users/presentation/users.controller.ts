@@ -14,7 +14,7 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.DRIVER, Role.PRESTADOR)
+  @Roles(Role.DRIVER)
   @Get('driver-area-smoke-test')
   driverArea() {
     return { ok: true, role: Role.DRIVER, message: 'Área protegida do entregador.' };

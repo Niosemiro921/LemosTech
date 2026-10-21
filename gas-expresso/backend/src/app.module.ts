@@ -22,6 +22,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { MailModule } from './modules/mail/mail.module';
 import { MapsModule } from './modules/maps/maps.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -47,7 +48,7 @@ import { MapsModule } from './modules/maps/maps.module';
     ChatModule,
     MailModule,
     MapsModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}
-

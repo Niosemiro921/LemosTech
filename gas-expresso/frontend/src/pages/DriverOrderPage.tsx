@@ -18,7 +18,7 @@ const nextAction: Record<string, string> = {
 export default function DriverOrderPage() {
   const navigate = useNavigate();
   const role = getCurrentUser()?.role;
-  const base = role === 'PRESTADOR' ? '/prestador' : '/driver';
+  const base = role === 'SUPPLIER' ? '/fornecedor' : '/driver';
   const { orderId } = useParams();
   const [delivery, setDelivery] = useState<DriverDelivery | null>(null);
   const [error, setError] = useState('');

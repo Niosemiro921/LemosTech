@@ -16,11 +16,11 @@ async function bootstrap() {
   const uploadDir = config.get<string>('mediaStoragePath')?.trim() || join(process.cwd(), 'uploads');
   app.use('/uploads', express.static(uploadDir, { fallthrough: false, index: false }));
 
-  app.enableCors({ origin: config.get<string>('corsOrigin'), credentials: true });
+  app.enableCors({ origin: true, credentials: true });
   await prisma.enableShutdownHooks(app);
 
-  const port = config.get<number>('port') ?? 3000;
-  await app.listen(port);
+  const port = config.get<number>('port') ?? 5048;
+  await app.listen(port, '0.0.0.0');
 }
 
 void bootstrap();

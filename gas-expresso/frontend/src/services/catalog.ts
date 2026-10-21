@@ -16,6 +16,7 @@ export async function fetchGasProducts(): Promise<GasProduct[]> {
     price: variant.unitPrice,
     cylinderPrice: variant.cylinderPrice ?? 0,
     description: product.description || product.name,
+    popular: variant.weightKg === 12,
   })));
 }
 

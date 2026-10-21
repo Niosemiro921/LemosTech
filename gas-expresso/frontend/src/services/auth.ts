@@ -1,13 +1,13 @@
 import { apiGet, apiPatch, apiPost, ApiError } from '../lib/api';
 
-export type AccountRole = 'CUSTOMER' | 'DRIVER' | 'SUPPLIER' | 'PRESTADOR' | 'ADMIN';
+export type AccountRole = 'CUSTOMER' | 'DRIVER' | 'SUPPLIER' | 'ADMIN';
 export type AccountStatus = 'ACTIVE' | 'PENDING_REVIEW' | 'DOCUMENTS_REQUIRED' | 'REJECTED' | 'SUSPENDED';
 
 export interface SessionUser { id: string; name?: string; phone: string; email?: string | null; role: AccountRole; status: AccountStatus; reviewedAt?: string | null; reviewNote?: string | null; }
 export interface Session { accessToken: string; user: SessionUser; createdAt: string; }
 export type RegisterResult = { message: string; user: SessionUser };
 const SESSION_KEY = 'gas-expresso-session';
-const ROLE_PATH: Record<AccountRole, string> = { CUSTOMER: '/perfil', DRIVER: '/driver', SUPPLIER: '/fornecedor', PRESTADOR: '/prestador', ADMIN: '/admin' };
+const ROLE_PATH: Record<AccountRole, string> = { CUSTOMER: '/perfil', DRIVER: '/driver', SUPPLIER: '/fornecedor', ADMIN: '/admin' };
 export function rolePath(role: AccountRole) { return ROLE_PATH[role] ?? '/acesso'; }
 export function saveSession(session: Session) { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); }
 export function getSession(): Session | null { try { const raw = localStorage.getItem(SESSION_KEY); if (!raw) return null; const session = JSON.parse(raw) as Session; return session?.accessToken && session.user ? session : null; } catch { return null; } }
@@ -24,11 +24,9 @@ export async function updateCustomerProfile(input: { fullName: string; email: st
 export async function registerCustomer(input: { fullName: string; phone: string; email?: string; password: string }) { return apiPost<RegisterResult>('/auth/register/customer', input, { requireAuth: false }); }
 export interface ProfessionalRegistration { fullName: string; phone: string; email?: string; password: string; documentNumber: string; vehicleType: string; vehiclePlate?: string; driverLicenseNumber?: string; nif?: string; experienceYears?: number; province?: string; municipality?: string; neighborhood?: string; address?: string; insurancePolicyNumber?: string; insuranceExpiresAt?: string; vehicleCapacityKg?: number; }
 export async function registerDriver(input: ProfessionalRegistration) { return apiPost<RegisterResult>('/auth/register/driver', input, { requireAuth: false }); }
-/** O backend actual não tem Role.PRESTADOR nem endpoint de registo para este perfil. Não chamar uma rota inexistente. */
-export interface PrestadorRegistration { fullName: string; phone: string; email?: string; password: string; legalName: string; tradeName: string; nif: string; commercialRegistration?: string; activity?: string; province?: string; municipality?: string; neighborhood?: string; address?: string; }
-export async function registerPrestador(_input: PrestadorRegistration): Promise<RegisterResult> {
-  throw new Error('O cadastro de Prestador independente ainda não está disponível na API. Escolha Entregador ou Empresa/Fornecedor.');
-}
+/** A Empresa é uma empresa parceira: no registo só são pedidos dados da empresa. */
+export interface EmpresaRegistration { fullName?: string; responsibleName?: string; phone: string; email?: string; password: string; legalName: string; tradeName: string; nif: string; commercialRegistration?: string; activity?: string; province?: string; municipality?: string; neighborhood?: string; address?: string; }
+export async function registerEmpresa(input: EmpresaRegistration) { return apiPost<RegisterResult>('/auth/register/supplier', input, { requireAuth: false }); }
 export interface SupplierRegistration { legalName: string; tradeName: string; nif: string; responsibleName: string; phone: string; email?: string; password: string; commercialRegistration?: string; activity?: string; phoneAlt?: string; province?: string; municipality?: string; neighborhood?: string; address?: string; }
 export async function registerSupplier(input: SupplierRegistration) { return apiPost<RegisterResult>('/auth/register/supplier', input, { requireAuth: false }); }
 export async function logout() { const logoutPath = (import.meta.env.VITE_AUTH_LOGOUT_PATH as string | undefined)?.trim() || '/auth/logout'; try { if (logoutPath) await apiPost(logoutPath); } finally { clearSession(); } }

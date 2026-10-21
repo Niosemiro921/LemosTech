@@ -5,7 +5,6 @@ import { LoginDto } from '../application/dto/login.dto';
 import { RegisterCustomerDto } from '../application/dto/register-customer.dto';
 import { RegisterDriverDto } from '../application/dto/register-driver.dto';
 import { RegisterSupplierDto } from '../application/dto/register-supplier.dto';
-import { RegisterPrestadorDto } from '../application/dto/register-prestador.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { ActiveAccountGuard } from '../guards/active-account.guard';
 import { RolesGuard } from '../guards/roles.guard';
@@ -30,11 +29,6 @@ export class AuthController {
   @Post('register/supplier')
   registerSupplier(@Body() dto: RegisterSupplierDto) {
     return this.auth.registerSupplier(dto);
-  }
-
-  @Post('register/prestador')
-  registerPrestador(@Body() dto: RegisterPrestadorDto) {
-    return this.auth.registerPrestador(dto);
   }
 
   @Post('login')
