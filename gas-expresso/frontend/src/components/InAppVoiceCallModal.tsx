@@ -17,6 +17,62 @@ interface Props {
   onClose: () => void;
 }
 
+// Ringtone generator using Web Audio API — no external assets needed
+function useRingtone(shouldRing: boolean) {
+  const audioCtxRef = useRef<OscillatorNode | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ctxRef = useRef<HTMLAudioContext | null>(null);
+
+  useEffect(() => {
+    if (!shouldRing) {
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      if (audioCtxRef.current) { try { audioCtxRef.current.stop(); } catch {} audioCtxRef.current = null; }
+      if (ctxRef.current) { ctxRef.current.close().catch(() => undefined); ctxRef.current = null; }
+      return;
+    }
+
+    const playRing = () => {
+      try {
+        if (!ctxRef.current) ctxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        const ctx = ctxRef.current;
+        if (ctx.state === 'suspended') void ctx.resume();
+
+        // Classic telephone ring: two beeps then pause
+        const scheduleBeep = (offset: number, freq: number) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          gain.gain.setValueAtTime(0, ctx.currentTime + offset);
+          gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + offset + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.4);
+          osc.start(ctx.currentTime + offset);
+          osc.stop(ctx.currentTime + offset + 0.42);
+        };
+
+        scheduleBeep(0, 440);     // beep 1
+        scheduleBeep(0.5, 440);   // beep 2
+        // pause ~1s, then repeat
+        intervalRef.current = setTimeout(() => {
+          audioCtxRef.current = null;
+          playRing();
+        }, 1400);
+      } catch {
+        // audio not supported — silent fallback
+      }
+    };
+
+    playRing();
+    return () => {
+      if (intervalRef.current) { clearTimeout(intervalRef.current); intervalRef.current = null; }
+      if (audioCtxRef.current) { try { audioCtxRef.current.stop(); } catch {} audioCtxRef.current = null; }
+      if (ctxRef.current) { ctxRef.current.close().catch(() => undefined); ctxRef.current = null; }
+    };
+  }, [shouldRing]);
+}
+
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -43,6 +99,9 @@ export function InAppVoiceCallModal({
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Ringtone: play when CALLING (waiting for callee) or RINGING (incoming call)
+  useRingtone(callState === 'CALLING' || callState === 'RINGING');
 
   // Call duration counter
   useEffect(() => {

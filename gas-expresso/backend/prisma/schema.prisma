@@ -625,6 +625,7 @@ model Order {
   callSessions          CallSession[]
 
   @@index([customerId, createdAt])
+  @@index([customerId, status])
   @@index([supplierId, status, createdAt])
   @@index([status, createdAt])
 }
