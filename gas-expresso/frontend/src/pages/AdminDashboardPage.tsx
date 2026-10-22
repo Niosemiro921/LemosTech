@@ -152,6 +152,7 @@ export default function AdminDashboardPage() {
         <Link to="/admin/audit" className="admin-link-card"><span>05</span><div><strong>Auditoria</strong><p>Rastrear alterações administrativas e financeiras.</p></div>→</Link>
         <Link to="/admin/wallet/top-ups" className="admin-link-card"><span>06</span><div><strong>Carteiras</strong><p>Rever recargas e pedidos financeiros dos profissionais.</p></div>→</Link>
         <Link to="/admin/email" className="admin-link-card"><span>07</span><div><strong>Comunicações</strong><p>Enviar notificações por email através do servidor.</p></div>→</Link>
+        <Link to="/admin/analytics" className="admin-link-card"><span>08</span><div><strong>Analytics</strong><p>Eventos de navegação, cliques e áreas da aplicação.</p></div>→</Link>
       </div>
 
       <section className="workspace-panel admin-principles">

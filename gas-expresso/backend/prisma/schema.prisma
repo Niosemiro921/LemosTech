@@ -769,3 +769,17 @@ model CallSession {
   @@index([receiverId, createdAt])
 }
 
+model AnalyticsEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String
+  eventType String
+  area      String
+  path      String?
+  target    String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([eventType])
+}
+

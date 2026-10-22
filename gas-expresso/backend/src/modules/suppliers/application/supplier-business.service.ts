@@ -77,6 +77,18 @@ export class SupplierBusinessService {
     return customers.map((customer) => ({ ...customer, segment: customer.totalOrders >= 5 ? 'FREQUENT' : customer.lastOrderAt && (Date.now() - customer.lastOrderAt.getTime()) > 90 * 86400000 ? 'INACTIVE' : 'NEW' }));
   }
 
+  async payments(userId: string) {
+    const supplier = await this.getSupplier(userId);
+    const invoices = await this.prisma.supplierInvoice.findMany({ where: { supplierId: supplier.id, status: 'PAID', type: 'SALE' }, orderBy: { issueDate: 'desc' }, take: 50, select: { id: true, number: true, amount: true, issueDate: true, status: true, description: true } });
+    return { currency: 'AOA', items: invoices.map(i => ({ id: i.id, reference: i.number, amount: i.amount, date: i.issueDate, status: i.status, description: i.description })), total: invoices.reduce((s, i) => s + i.amount, 0) };
+  }
+
+  async expenses(userId: string) {
+    const supplier = await this.getSupplier(userId);
+    const invoices = await this.prisma.supplierInvoice.findMany({ where: { supplierId: supplier.id, status: 'PENDING', type: 'PURCHASE' }, orderBy: { issueDate: 'desc' }, take: 50, select: { id: true, number: true, amount: true, issueDate: true, status: true, description: true } });
+    return { currency: 'AOA', items: invoices.map(i => ({ id: i.id, reference: i.number, amount: i.amount, date: i.issueDate, status: i.status, description: i.description })), total: invoices.reduce((s, i) => s + i.amount, 0) };
+  }
+
   async reports(userId: string) {
     const supplier = await this.getSupplier(userId);
     const orders = await this.prisma.order.findMany({ where: { supplierId: supplier.id }, select: { status: true, total: true, deliveryFee: true, createdAt: true } });

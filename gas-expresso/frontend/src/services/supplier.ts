@@ -29,4 +29,17 @@ export const updateSupplierLocation = (latitude: number, longitude: number) =>
 export const acceptSupplierOrder = (id: string) => apiPost(`/suppliers/me/orders/${encodeURIComponent(id)}/accept`);
 export const prepareSupplierOrder = (id: string) => apiPost(`/suppliers/me/orders/${encodeURIComponent(id)}/prepare`);
 export const readySupplierOrder = (id: string) => apiPost(`/suppliers/me/orders/${encodeURIComponent(id)}/ready`);
+export interface SupplierStockMovement {
+  id: string;
+  type: 'RESERVE' | 'RELEASE' | 'ADJUSTMENT';
+  quantity: number;
+  note: string | null;
+  createdAt: string;
+  orderId: string | null;
+  orderReference: string | null;
+  variantId: string;
+  variantName: string;
+  variantSku: string;
+}
+export const fetchSupplierInventoryMovements = () => apiGet<SupplierStockMovement[]>('/suppliers/me/inventory/movements');
 export const startDispatch = (id: string) => apiPost(`/dispatch/orders/${encodeURIComponent(id)}/start`, {});

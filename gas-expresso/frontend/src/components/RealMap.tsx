@@ -10,11 +10,12 @@ interface RealMapProps {
   onChange?: (point: MapPoint) => void;
   markerLabel?: string;
   interactive?: boolean;
+  layer?: 'street' | 'satellite';
 }
 
 const WORLD_CENTER: MapPoint = { lat: 0, lng: 0 };
 
-export function RealMap({ value, initialCenter, compact = false, onChange, markerLabel = 'Local selecionado', interactive = Boolean(onChange) }: RealMapProps) {
+export function RealMap({ value, initialCenter, compact = false, onChange, markerLabel = 'Local selecionado', interactive = Boolean(onChange), layer = 'street' }: RealMapProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.CircleMarker | null>(null);
@@ -38,9 +39,9 @@ export function RealMap({ value, initialCenter, compact = false, onChange, marke
     }).setView([initial.lat, initial.lng], hasValue ? 15 : 2);
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer(layer === 'satellite' ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors',
+      attribution: layer === 'satellite' ? '&copy; Esri, Maxar, CNES/Spot, etc.' : '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
     const marker = L.circleMarker([initial.lat, initial.lng], {

@@ -103,6 +103,42 @@ Campos mínimos de criação: `category`, `severity`, `description`; `orderId` �
 `GET /suppliers/me/schedule`
 `PATCH /suppliers/me/schedule`
 
+## Stock da empresa
+
+`GET /suppliers/me/inventory` — inventário da empresa autenticada.
+`PATCH /suppliers/me/inventory` — cria ou atualiza a linha de inventário de uma variante.
+
+O corpo exige `variantId` (UUID da `ProductVariant`), `availableQty` (inteiro ≥ 0) e aceita `reorderLevel` (inteiro ≥ 0) e `note` (texto do movimento). A `availableQty` nunca pode ficar abaixo do `reservedQty`.
+
+`GET /suppliers/me/inventory/movements` — livro de movimentos do stock da empresa.
+
+Cada movimento devolve `id`, `type` (`RESERVE`, `RELEASE` ou `ADJUSTMENT`), `quantity`, `note`, `createdAt`, `orderId`, `orderReference`, `variantId`, `variantName` e `variantSku`. A lista vem ordenada do mais recente para o mais antigo.
+
+- `RESERVE` — stock reservado por um pedido criado.
+- `RELEASE` — saída por entrega (`DELIVERED`/`COMPLETED`) ou devolução por cancelamento.
+- `ADJUSTMENT` — ajuste manual feito pelo fornecedor.
+
+## Pagamentos e despesas da empresa
+
+`GET /suppliers/me/payments` — faturas de venda já pagas.
+`GET /suppliers/me/expenses` — faturas de compra por liquidar.
+
+Ambos devolvem `{ "currency": "AOA", "items": [...], "total": number }`. Cada item tem `id`, `reference`, `amount`, `date`, `status` e `description`.
+
+O modelo de negócio do lançamento é `PAY_ON_DELIVERY`: o pagamento é confirmado na entrega e não existe integração com provedor externo.
+
+## Analytics
+
+`POST /analytics/events` — regista um evento de navegação ou clique. Não exige autenticação.
+
+O corpo exige `sessionId` (máx. 100 caracteres), `eventType` (`PAGE_VIEW` ou `CLICK`), `area` (`CUSTOMER`, `DRIVER`, `SUPPLIER`, `ADMIN` ou `PUBLIC`) e `path` (máx. 255). O `target` (máx. 100) é opcional.
+
+`GET /analytics/summary` — resumo agregado. **Exige `ADMIN`.** Aceita `area` e `sessionId` como filtros opcionais.
+
+Devolve `{ "counts": [{ "eventType": "...", "area": "...", "_count": { "id": number } }], "total": number }`.
+
+O tracker do frontend nunca envia conteúdo de campos, palavras-passe, telefone ou endereço, e a falha de analytics nunca bloqueia a jornada do utilizador.
+
 ## Backoffice
 
 `GET /admin/overview`

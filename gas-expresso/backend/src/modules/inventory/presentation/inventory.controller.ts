@@ -16,6 +16,7 @@ export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
   @Get('location') locationInfo(@Req() req: Request & { user: { sub: string } }) { return this.inventory.getLocation(req.user.sub); }
   @Get('inventory') list(@Req() req: Request & { user: { sub: string } }) { return this.inventory.getSupplierInventory(req.user.sub); }
+  @Get('inventory/movements') movements(@Req() req: Request & { user: { sub: string } }) { return this.inventory.getSupplierMovements(req.user.sub); }
   @Patch('inventory') upsert(@Req() req: Request & { user: { sub: string } }, @Body() dto: UpsertInventoryDto) { return this.inventory.upsert(req.user.sub, dto.variantId, dto.availableQty, dto.reorderLevel ?? 5, dto.note); }
   @Patch('location') location(@Req() req: Request & { user: { sub: string } }, @Body() dto: UpdateLocationDto) { return this.inventory.setLocation(req.user.sub, dto.latitude, dto.longitude); }
 }

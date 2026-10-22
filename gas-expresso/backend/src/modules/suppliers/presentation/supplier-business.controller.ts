@@ -24,4 +24,6 @@ export class SupplierBusinessController {
   @Post('interactions') interaction(@Req() req: ReqUser, @Body() dto: CreateInteractionDto) { return this.service.createInteraction(req.user.sub, dto); }
   @Get('segmentation') segmentation(@Req() req: ReqUser) { return this.service.segmentation(req.user.sub); }
   @Get('reports') reports(@Req() req: ReqUser) { return this.service.reports(req.user.sub); }
+  @Get('payments') payments(@Req() req: ReqUser) { return this.service.payments(req.user.sub); }
+  @Get('expenses') expenses(@Req() req: ReqUser) { return this.service.expenses(req.user.sub); }
 }

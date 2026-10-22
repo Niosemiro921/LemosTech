@@ -292,6 +292,22 @@ export class OrderService {
       });
       if (changed.count !== 1) throw new ConflictException('O estado do pedido mudou. Atualize e tente novamente.');
       await tx.orderStatusHistory.create({ data: { orderId: id, status: to, note } });
+      if (to === OrderStatus.DELIVERED || to === OrderStatus.COMPLETED) {
+        const orderWithItems = await tx.order.findFirst({ where: { id, supplierId: supplier.id }, include: { items: true } });
+        if (orderWithItems?.items?.length) {
+          for (const item of orderWithItems.items) {
+            try {
+              const inv = await tx.inventoryItem.findUnique({ where: { supplierId_variantId: { supplierId: supplier.id, variantId: item.variantId } } });
+              if (inv) {
+                const newAvailable = Math.max(0, inv.availableQty - item.quantity);
+                await tx.inventoryItem.update({ where: { supplierId_variantId: { supplierId: supplier.id, variantId: item.variantId } }, data: { availableQty: newAvailable } });
+                await tx.inventoryMovement.create({ data: { inventoryId: inv.id, orderId: id, type: 'RELEASE', quantity: item.quantity, note: `Entrega ${to} — saída do stock.` } });
+              }
+            } catch {}
+          }
+        }
+      }
+
       await tx.notification.create({
         data: {
           userId: order.customerId,

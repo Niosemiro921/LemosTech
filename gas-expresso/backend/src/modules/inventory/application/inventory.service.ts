@@ -27,6 +27,28 @@ export class InventoryService {
     });
   }
 
+  async getSupplierMovements(userId: string, limit = 100) {
+    const supplier = await this.supplier(userId);
+    const movements = await this.prisma.inventoryMovement.findMany({
+      where: { inventory: { supplierId: supplier.id } },
+      include: { inventory: { include: { variant: { select: { name: true, sku: true, weightKg: true } } } }, order: { select: { id: true, reference: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 300),
+    });
+    return movements.map((m) => ({
+      id: m.id,
+      type: m.type,
+      quantity: m.quantity,
+      note: m.note,
+      createdAt: m.createdAt,
+      orderId: m.orderId,
+      orderReference: m.order?.reference ?? null,
+      variantId: m.inventory.variantId,
+      variantName: m.inventory.variant.name,
+      variantSku: m.inventory.variant.sku,
+    }));
+  }
+
   async setLocation(userId: string, latitude: number, longitude: number) {
     const supplier = await this.supplier(userId);
     return this.prisma.supplierProfile.update({ where: { id: supplier.id }, data: { latitude, longitude }, select: { id: true, tradeName: true, latitude: true, longitude: true } });

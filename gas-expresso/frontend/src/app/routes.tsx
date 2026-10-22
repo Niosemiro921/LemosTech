@@ -47,6 +47,7 @@ import SupplierCustomersPage from '../pages/SupplierCustomersPage';
 import SupplierInteractionsPage from '../pages/SupplierInteractionsPage';
 import SupplierSegmentationPage from '../pages/SupplierSegmentationPage';
 import SupplierReportsPage from '../pages/SupplierReportsPage';
+import AdminAnalyticsPage from '../pages/AdminAnalyticsPage';
 import SupplierProfilePage from '../pages/SupplierProfilePage';
 import OrderChatPage from '../pages/OrderChatPage';
 
@@ -112,6 +113,7 @@ export function AppRoutes() {
       <Route path="/admin/audit" element={<RequireAuth roles={['ADMIN']}><AdminAuditPage /></RequireAuth>} />
       <Route path="/admin/wallet/top-ups" element={<RequireAuth roles={['ADMIN']}><AdminWalletTopUpsPage /></RequireAuth>} />
       <Route path="/admin/email" element={<RequireAuth roles={['ADMIN']}><AdminEmailPage /></RequireAuth>} />
+      <Route path="/admin/analytics" element={<RequireAuth roles={['ADMIN']}><AdminAnalyticsPage /></RequireAuth>} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Route>

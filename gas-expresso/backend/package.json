@@ -6,7 +6,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.prisma\"",
+    "verify:e2e": "node scripts/verify-e2e-flow.mjs",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
