@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { Role } from '../../../shared/domain/auth.enums';
+import { ActiveAccountGuard } from '../../auth/guards/active-account.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { Roles } from '../../auth/guards/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -16,7 +17,7 @@ class RequestWithdrawalDto {
 import { DriverFinanceService } from '../application/driver-finance.service';
 
 @Controller('drivers/me/wallet')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
 @Roles(Role.DRIVER)
 export class DriverFinanceController {
   constructor(private readonly finance: DriverFinanceService) {}

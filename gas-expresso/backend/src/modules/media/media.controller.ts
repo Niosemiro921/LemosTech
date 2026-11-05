@@ -56,4 +56,12 @@ export class MediaController {
     const saved = await this.media.storeImage(file, 'supplier');
     return this.suppliers.updateByUserId(req.user.sub, { photoUrl: saved.url });
   }
+
+  @Post('suppliers/me/subscription-proof')
+  @Roles(Role.SUPPLIER)
+  @UseInterceptors(FileInterceptor('file'))
+  async subscriptionProof(@UploadedFile() file?: UploadedFilePayload) {
+    if (!file) throw new BadRequestException('Selecione o comprovativo de transferência.');
+    return this.media.storeDocument(file, 'subscription-proof');
+  }
 }

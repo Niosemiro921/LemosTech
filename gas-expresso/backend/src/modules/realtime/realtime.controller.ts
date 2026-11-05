@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Req, Res, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { ActiveAccountGuard } from '../auth/guards/active-account.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/guards/roles.decorator';
@@ -8,7 +9,7 @@ import { Role } from '../../shared/domain/auth.enums';
 import { RealtimeService } from './realtime.service';
 
 @Controller('realtime/orders')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
 @Roles(Role.CUSTOMER, Role.DRIVER)
 export class RealtimeController {
   constructor(private readonly prisma: PrismaService, private readonly realtime: RealtimeService) {}

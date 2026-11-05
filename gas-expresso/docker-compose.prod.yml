@@ -1,0 +1,85 @@
+# Deploy de produção: PostgreSQL + backend NestJS + frontend (Nginx)
+# Uso:
+#   cp .env.production.example .env.production
+#   # edite .env.production
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+
+name: gas-expresso-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gas-expresso-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gas_expresso}
+      POSTGRES_USER: ${POSTGRES_USER:-gas_expresso}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env.production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gas_expresso} -d ${POSTGRES_DB:-gas_expresso}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+    container_name: gas-expresso-prod-backend
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5048
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gas_expresso}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gas_expresso}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env.production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      PLATFORM_COMMISSION_RATE: ${PLATFORM_COMMISSION_RATE:-0.08}
+      DISPATCH_RADIUS_KM: ${DISPATCH_RADIUS_KM:-15}
+      DISPATCH_OFFER_TTL_SECONDS: ${DISPATCH_OFFER_TTL_SECONDS:-30}
+      MINIMUM_DRIVER_OPERATING_BALANCE: ${MINIMUM_DRIVER_OPERATING_BALANCE:-10000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      SMTP_EHLO: ${SMTP_EHLO:-gas-expresso}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MEDIA_STORAGE_PATH: /app/uploads
+      MEDIA_PUBLIC_BASE_URL: /uploads
+      BILLING_BANK: ${BILLING_BANK:-}
+      BILLING_IBAN: ${BILLING_IBAN:-}
+      BILLING_ACCOUNT_NAME: ${BILLING_ACCOUNT_NAME:-}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5048/api/v1').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_REALTIME_URL: ${VITE_REALTIME_URL:-}
+    container_name: gas-expresso-prod-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-80}:80"
+
+volumes:
+  pgdata:
+  uploads:

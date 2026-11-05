@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchAdminOverview, type AdminOverview } from '../services/admin';
 import { extractMessage } from '../services/auth';
 import { LogoutButton } from '../components/LogoutButton';
+import { DonutChart, HorizontalBars, type ChartDatum } from '../components/Charts';
 import { formatAOA } from '../services/catalog';
 
 const REFRESH_INTERVAL_MS = 15_000;
@@ -73,15 +74,38 @@ export default function AdminDashboardPage() {
   }, [data]);
   const analyticsEnabled = data?.analyticsEnabled === true;
 
-  const metrics = [
-    { label: 'Contas registadas', value: displayNumber(registeredUsers), detail: 'Todos os perfis contabilizados', accent: 'neutral', icon: '01' },
-    { label: 'Clientes', value: displayNumber(data?.customers), detail: 'Contas de cliente', accent: 'orange', icon: '02' },
-    { label: 'Entregadores', value: displayNumber(data?.drivers), detail: data?.activeDrivers == null ? 'Registados no sistema' : `${displayNumber(data.activeDrivers)} online/activos`, accent: 'green', icon: '03' },
-    { label: 'Empresas', value: displayNumber(data?.companies), detail: data?.activeCompanies == null ? 'Fornecedores registados' : `${displayNumber(data.activeCompanies)} com conta activa`, accent: 'blue', icon: '04' },
-    { label: 'Empresaes', value: displayNumber(fornecedores), detail: 'Perfis profissionais separados', accent: 'purple', icon: '05' },
-    { label: 'Novos registos · 24h', value: displayNumber(data?.registrationsLast24h), detail: 'Contas criadas nas últimas 24 horas', accent: 'neutral', icon: '06' },
-    { label: 'Pedidos activos', value: displayNumber(data?.activeOrders), detail: 'Ainda em operação', accent: 'orange', icon: '07' },
-    { label: 'Cliques do cliente · 24h', value: analyticsEnabled ? displayNumber(data?.clientClicksLast24h) : '—', detail: analyticsEnabled ? `${displayNumber(data?.clientPageViewsLast24h)} visualizações da área de cliente` : 'Activar a integração de analytics no backend', accent: analyticsEnabled ? 'green' : 'muted', icon: '08' },
+  const composition: ChartDatum[] = data ? [
+    { label: 'Clientes', value: Number(data.customers) || 0, color: '#e4572e' },
+    { label: 'Entregadores', value: Number(data.drivers) || 0, color: '#2f9e63' },
+    { label: 'Empresas', value: Number(data.companies) || 0, color: '#4a90d9' },
+    { label: 'Profissionais', value: Number(fornecedores) || 0, color: '#8065bd' },
+  ] : [];
+
+  const statusData: ChartDatum[] = data?.usersByStatus
+    ? Object.entries(data.usersByStatus).map(([label, value], index) => ({ label, value: Number(value) || 0, color: ['#18895f', '#f0a040', '#b93434', '#8a918b'][index % 4] }))
+    : [];
+
+  const activity: ChartDatum[] = analyticsEnabled ? [
+    { label: 'Cliques na área do cliente', value: Number(data?.clientClicksLast24h) || 0, color: '#e4572e' },
+    { label: 'Páginas abertas por clientes', value: Number(data?.clientPageViewsLast24h) || 0, color: '#f0a040' },
+    { label: 'Cliques em todas as áreas', value: Number(data?.clicksLast24h) || 0, color: '#2f9e63' },
+  ] : [];
+
+  const operations: ChartDatum[] = [
+    { label: 'Pedidos activos', value: Number(data?.activeOrders) || 0, color: '#e4572e' },
+    { label: 'Pedidos concluídos', value: Number(data?.completedOrders) || 0, color: '#18895f' },
+    { label: 'Incidentes abertos', value: Number(data?.incidentsOpen) || 0, color: '#b93434' },
+    { label: 'Inscrições pendentes', value: Number(data?.pendingApplications) || 0, color: '#f0a040' },
+    { label: 'Documentos a expirar', value: Number(data?.expiringDocuments) || 0, color: '#8065bd' },
+    { label: 'Recargas pendentes', value: Number(data?.walletTopUpsPending) || 0, color: '#4a90d9' },
+    { label: 'Levantamentos pendentes', value: Number(data?.walletWithdrawalsPending) || 0, color: '#5d6ad0' },
+    { label: 'Novos registos · 24h', value: Number(data?.registrationsLast24h) || 0, color: '#8a918b' },
+  ];
+
+  const orderFlow: ChartDatum[] = [
+    { label: 'Concluídos', value: Number(data?.completedOrders) || 0, color: '#18895f' },
+    { label: 'Em operação', value: Number(data?.activeOrders) || 0, color: '#e4572e' },
+    { label: 'Incidentes', value: Number(data?.incidentsOpen) || 0, color: '#b93434' },
   ];
 
   return (
@@ -101,6 +125,7 @@ export default function AdminDashboardPage() {
           <span className="admin-lock">Acesso restrito</span>
           <button type="button" className="secondary-btn" onClick={() => { void fetchAdminOverview().then((overview) => { setData(overview); setLastUpdated(new Date()); setError(''); }).catch((cause: unknown) => setError(extractMessage(cause, 'Não foi possível actualizar as métricas.'))).finally(() => setRefreshing(false)); setRefreshing(true); }} disabled={refreshing}>↻ Actualizar</button>
           <Link to="/admin/wallet/top-ups" className="secondary-btn">Recargas</Link>
+          <Link to="/admin/importar" className="secondary-btn">Importar dados</Link>
           <LogoutButton className="secondary-btn" />
         </div>
       </div>
@@ -109,40 +134,62 @@ export default function AdminDashboardPage() {
 
       {loading && !data ? (
         <div className="admin-loading-grid" aria-label="A carregar métricas">
-          {Array.from({ length: 8 }).map((_, index) => <div key={index} className="admin-metric-skeleton" />)}
+          {Array.from({ length: 4 }).map((_, index) => <div key={index} className="admin-metric-skeleton" />)}
         </div>
       ) : (
-        <div className="admin-dashboard-metrics">
-          {metrics.map((metric) => (
-            <article className={`admin-metric-card accent-${metric.accent}`} key={metric.label}>
-              <div className="admin-metric-top"><span>{metric.label}</span><small>{metric.icon}</small></div>
-              <strong className="admin-metric-value">{metric.value}</strong>
-              <p>{metric.detail}</p>
-            </article>
-          ))}
+        <div className="chart-grid">
+          <section className="workspace-panel">
+            <div className="admin-panel-heading">
+              <div><span className="section-kicker">Contas</span><h2>Distribuição por perfil.</h2><p>Total de {displayNumber(registeredUsers)} contas registadas.</p></div>
+            </div>
+            <DonutChart data={composition} centerValue={displayNumber(registeredUsers)} centerLabel="contas registadas" ariaLabel="Distribuição de contas por perfil" />
+          </section>
+
+          <section className="workspace-panel">
+            <div className="admin-panel-heading">
+              <div><span className="section-kicker">Estado</span><h2>Contas por estado.</h2><p>Distribuição dos perfis conforme o estado da conta.</p></div>
+            </div>
+            {statusData.length > 0
+              ? <DonutChart data={statusData} centerValue={displayNumber(statusData.reduce((sum, item) => sum + item.value, 0))} centerLabel="contas" ariaLabel="Contas por estado" />
+              : <div className="chart-empty">A API não devolveu contas por estado.</div>}
+          </section>
+
+          <section className="workspace-panel">
+            <div className="admin-panel-heading">
+              <div><span className="section-kicker">Actividade · 24h</span><h2>Utilização da plataforma.</h2><p>Eventos registados nas últimas 24 horas.</p></div>
+              <span className={`admin-integrity-pill ${analyticsEnabled ? 'enabled' : 'pending'}`}>{analyticsEnabled ? 'Analytics activo' : 'Analytics por activar'}</span>
+            </div>
+            {analyticsEnabled
+              ? <HorizontalBars data={activity} />
+              : <div className="chart-empty">Analytics por activar no backend — os contadores aparecem aqui quando a integração estiver ligada.</div>}
+            {!analyticsEnabled && <div className="admin-analytics-hint"><strong>Contadores ainda não ligados ao servidor.</strong><p>Os números não serão inventados nem retirados apenas deste navegador. Aplique o patch do backend incluído no pacote para guardar eventos agregáveis e activá-los aqui.</p></div>}
+          </section>
+
+          <section className="workspace-panel">
+            <div className="admin-panel-heading">
+              <div><span className="section-kicker">Operação</span><h2>Fila e pendências.</h2><p>Pedidos, incidentes e processos administrativos.</p></div>
+            </div>
+            <HorizontalBars data={operations} />
+          </section>
+
+          <section className="workspace-panel chart-grid-full">
+            <div className="admin-panel-heading">
+              <div><span className="section-kicker">Financeiro</span><h2>Receita concluída.</h2><p>Valores em kwanzas de pedidos entregues/concluídos, conforme a API.</p></div>
+            </div>
+            <div className="finance-chart-row">
+              <div className="revenue-hero">
+                <small>Receita concluída</small>
+                <strong>{data && typeof data.revenue === 'number' ? formatAOA(data.revenue) : '—'}</strong>
+                <p>{displayNumber(data?.completedOrders)} pedidos concluídos · {displayNumber(data?.incidentsOpen)} incidentes abertos · {displayNumber(data?.pendingApplications)} inscrições pendentes</p>
+              </div>
+              <div className="finance-chart">
+                <DonutChart data={orderFlow} centerValue={displayNumber((Number(data?.completedOrders) || 0) + (Number(data?.activeOrders) || 0) + (Number(data?.incidentsOpen) || 0))} centerLabel="pedidos" ariaLabel="Pedidos concluídos, em operação e com incidentes" />
+              </div>
+            </div>
+            {currentActive !== null && <p className="admin-status-footnote">Contas com estado ACTIVE: <strong>{displayNumber(currentActive)}</strong></p>}
+          </section>
         </div>
       )}
-
-      <div className="admin-dashboard-main-grid">
-        <section className="workspace-panel admin-activity-panel">
-          <div className="admin-panel-heading"><div><span className="section-kicker">Actividade</span><h2>Utilização da plataforma.</h2><p>Eventos registados nas últimas 24 horas.</p></div><span className={`admin-integrity-pill ${analyticsEnabled ? 'enabled' : 'pending'}`}>{analyticsEnabled ? 'Analytics activo' : 'Analytics por activar'}</span></div>
-          <div className="admin-activity-stats">
-            <div><span>Cliques na área do cliente</span><strong>{analyticsEnabled ? displayNumber(data?.clientClicksLast24h) : '—'}</strong><small>Botões e ligações accionados</small></div>
-            <div><span>Páginas abertas por clientes</span><strong>{analyticsEnabled ? displayNumber(data?.clientPageViewsLast24h) : '—'}</strong><small>Navegações registadas</small></div>
-            <div><span>Cliques em todas as áreas</span><strong>{analyticsEnabled ? displayNumber(data?.clicksLast24h) : '—'}</strong><small>Cliente, entregador, empresa e administração</small></div>
-          </div>
-          {!analyticsEnabled && <div className="admin-analytics-hint"><strong>Contadores ainda não ligados ao servidor.</strong><p>Os números não serão inventados nem retirados apenas deste navegador. Aplique o patch do backend incluído no pacote para guardar eventos agregáveis e activá-los aqui.</p></div>}
-          {currentActive !== null && <p className="admin-status-footnote">Contas com estado ACTIVE: <strong>{displayNumber(currentActive)}</strong></p>}
-        </section>
-
-        <section className="workspace-panel admin-revenue-panel">
-          <div><span className="section-kicker">Financeiro</span><h2>Receita concluída.</h2><p>Valores em kwanzas de pedidos entregues/concluídos, conforme a API.</p></div>
-          <strong>{data && typeof data.revenue === 'number' ? formatAOA(data.revenue) : '—'}</strong>
-          <div className="admin-mini-finance-row"><span>Pedidos concluídos</span><b>{displayNumber(data?.completedOrders)}</b></div>
-          <div className="admin-mini-finance-row"><span>Incidentes abertos</span><b>{displayNumber(data?.incidentsOpen)}</b></div>
-          <div className="admin-mini-finance-row"><span>Inscrições pendentes</span><b>{displayNumber(data?.pendingApplications)}</b></div>
-        </section>
-      </div>
 
       <div className="admin-link-grid admin-link-grid-v5">
         <Link to="/admin/applications" className="admin-link-card"><span>01</span><div><strong>Candidaturas</strong><p>Aprovar, rejeitar ou pedir documentos a novos parceiros.</p></div>→</Link>
@@ -153,6 +200,7 @@ export default function AdminDashboardPage() {
         <Link to="/admin/wallet/top-ups" className="admin-link-card"><span>06</span><div><strong>Carteiras</strong><p>Rever recargas e pedidos financeiros dos profissionais.</p></div>→</Link>
         <Link to="/admin/email" className="admin-link-card"><span>07</span><div><strong>Comunicações</strong><p>Enviar notificações por email através do servidor.</p></div>→</Link>
         <Link to="/admin/analytics" className="admin-link-card"><span>08</span><div><strong>Analytics</strong><p>Eventos de navegação, cliques e áreas da aplicação.</p></div>→</Link>
+        <Link to="/admin/billing" className="admin-link-card"><span>09</span><div><strong>Assinaturas</strong><p>Confirmar transferências, licenças e planos das empresas.</p></div>→</Link>
       </div>
 
       <section className="workspace-panel admin-principles">

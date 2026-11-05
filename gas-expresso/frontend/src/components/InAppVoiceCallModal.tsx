@@ -21,7 +21,7 @@ interface Props {
 function useRingtone(shouldRing: boolean) {
   const audioCtxRef = useRef<OscillatorNode | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ctxRef = useRef<HTMLAudioContext | null>(null);
+  const ctxRef = useRef<any | null>(null);
 
   useEffect(() => {
     if (!shouldRing) {

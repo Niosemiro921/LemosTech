@@ -13,10 +13,23 @@ import DriverPage from '../pages/DriverPage';
 import DriverOrdersPage from '../pages/DriverOrdersPage';
 import DriverProfilePage from '../pages/DriverProfilePage';
 import AccessPage from '../pages/AccessPage';
-import SupplierPage from '../pages/SupplierPage';
+import SupplierDashboardPage from '../pages/SupplierDashboardPage';
 import SupplierStockPage from '../pages/SupplierStockPage';
 import SupplierOrdersPage from '../pages/SupplierOrdersPage';
 import SupplierOrderPage from '../pages/SupplierOrderPage';
+import SupplierProductsPage from '../pages/SupplierProductsPage';
+import SupplierBottlesPage from '../pages/SupplierBottlesPage';
+import SupplierPurchasesPage from '../pages/SupplierPurchasesPage';
+import SupplierSuppliersPage from '../pages/SupplierSuppliersPage';
+import SupplierDeliveriesPage from '../pages/SupplierDeliveriesPage';
+import SupplierInvoicesPage from '../pages/SupplierInvoicesPage';
+import SupplierReceivablePage from '../pages/SupplierReceivablePage';
+import SupplierPayablePage from '../pages/SupplierPayablePage';
+import SupplierExpensesPage from '../pages/SupplierExpensesPage';
+import SupplierEmployeesPage from '../pages/SupplierEmployeesPage';
+import SupplierBranchesPage from '../pages/SupplierBranchesPage';
+import SupplierAuditPage from '../pages/SupplierAuditPage';
+import SupplierVendasPage from '../pages/SupplierVendasPage';
 import DriverOrderPage from '../pages/DriverOrderPage';
 import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
@@ -38,6 +51,7 @@ import AdminOrdersPage from '../pages/AdminOrdersPage';
 import AdminDispatchPage from '../pages/AdminDispatchPage';
 import AdminAuditPage from '../pages/AdminAuditPage';
 import AdminWalletTopUpsPage from '../pages/AdminWalletTopUpsPage';
+import AdminWithdrawalPage from '../pages/AdminWithdrawalPage';
 import AdminApplicationsPage from '../pages/AdminApplicationsPage';
 import AdminEmailPage from '../pages/AdminEmailPage';
 import EmpresaProfilePage from '../pages/EmpresaProfilePage';
@@ -49,6 +63,10 @@ import SupplierSegmentationPage from '../pages/SupplierSegmentationPage';
 import SupplierReportsPage from '../pages/SupplierReportsPage';
 import AdminAnalyticsPage from '../pages/AdminAnalyticsPage';
 import SupplierProfilePage from '../pages/SupplierProfilePage';
+import SupplierBillingPage from '../pages/SupplierBillingPage';
+import AdminBillingPage from '../pages/AdminBillingPage';
+import SupplierImportPage from '../pages/SupplierImportPage';
+import AdminImportPage from '../pages/AdminImportPage';
 import OrderChatPage from '../pages/OrderChatPage';
 
 
@@ -86,17 +104,33 @@ export function AppRoutes() {
       <Route path="/driver/incidentes" element={<RequireAuth roles={['DRIVER','SUPPLIER']}><DriverIncidentsPage /></RequireAuth>} />
 
       <Route element={<RequireAuth roles={['SUPPLIER']}><SupplierShell /></RequireAuth>}>
-        <Route path="/fornecedor" element={<SupplierPage />} />
+        <Route path="/fornecedor" element={<SupplierDashboardPage />} />
         <Route path="/fornecedor/perfil" element={<SupplierProfilePage />} />
+        <Route path="/fornecedor/assinatura" element={<SupplierBillingPage />} />
         <Route path="/fornecedor/stock" element={<SupplierStockPage />} />
         <Route path="/fornecedor/lotes" element={<SupplierLotsPage />} />
         <Route path="/fornecedor/pedidos" element={<SupplierOrdersPage />} />
         <Route path="/fornecedor/pedido/:orderId" element={<SupplierOrderPage />} />
         <Route path="/fornecedor/financeiro" element={<SupplierFinancePage />} />
-        <Route path="/fornecedor/clientes" element={<SupplierCustomersPage />} />
-        <Route path="/fornecedor/interacoes" element={<SupplierInteractionsPage />} />
-        <Route path="/fornecedor/segmentacao" element={<SupplierSegmentationPage />} />
+        <Route path="/fornecedor/botijas" element={<SupplierBottlesPage />} />
+        <Route path="/fornecedor/produtos" element={<SupplierProductsPage />} />
+        <Route path="/fornecedor/entregas" element={<SupplierDeliveriesPage />} />
+        <Route path="/fornecedor/compras" element={<SupplierPurchasesPage />} />
+        <Route path="/fornecedor/fornecedores" element={<SupplierSuppliersPage />} />
+        <Route path="/fornecedor/faturacao" element={<SupplierInvoicesPage />} />
+        <Route path="/fornecedor/receber" element={<SupplierReceivablePage />} />
+        <Route path="/fornecedor/pagar" element={<SupplierPayablePage />} />
+        <Route path="/fornecedor/despesas" element={<SupplierExpensesPage />} />
+        <Route path="/fornecedor/colaboradores" element={<SupplierEmployeesPage />} />
+        <Route path="/fornecedor/filiais" element={<SupplierBranchesPage />} />
+        <Route path="/fornecedor/auditoria" element={<SupplierAuditPage />} />
         <Route path="/fornecedor/relatorios" element={<SupplierReportsPage />} />
+        <Route path="/fornecedor/vendas" element={<SupplierVendasPage />} />
+        <Route path="/fornecedor/segmentacao" element={<SupplierSegmentationPage />} />
+        <Route path="/fornecedor/interacoes" element={<SupplierInteractionsPage />} />
+        <Route path="/fornecedor/clientes" element={<SupplierCustomersPage />} />
+        <Route path="/fornecedor/importar" element={<SupplierImportPage />} />
+        <Route path="/fornecedor/horarios" element={<CompanySchedulePage />} />
         <Route path="/empresa/perfil" element={<EmpresaProfilePage />} />
         <Route path="/empresa/documentos" element={<CompanyDocumentsPage />} />
         <Route path="/empresa/equipa" element={<CompanyTeamPage />} />
@@ -112,8 +146,11 @@ export function AppRoutes() {
       <Route path="/admin/dispatch" element={<RequireAuth roles={['ADMIN']}><AdminDispatchPage /></RequireAuth>} />
       <Route path="/admin/audit" element={<RequireAuth roles={['ADMIN']}><AdminAuditPage /></RequireAuth>} />
       <Route path="/admin/wallet/top-ups" element={<RequireAuth roles={['ADMIN']}><AdminWalletTopUpsPage /></RequireAuth>} />
+      <Route path="/admin/wallet/withdrawals" element={<RequireAuth roles={['ADMIN']}><AdminWithdrawalPage /></RequireAuth>} />
       <Route path="/admin/email" element={<RequireAuth roles={['ADMIN']}><AdminEmailPage /></RequireAuth>} />
       <Route path="/admin/analytics" element={<RequireAuth roles={['ADMIN']}><AdminAnalyticsPage /></RequireAuth>} />
+      <Route path="/admin/billing" element={<RequireAuth roles={['ADMIN']}><AdminBillingPage /></RequireAuth>} />
+      <Route path="/admin/importar" element={<RequireAuth roles={['ADMIN']}><AdminImportPage /></RequireAuth>} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Route>

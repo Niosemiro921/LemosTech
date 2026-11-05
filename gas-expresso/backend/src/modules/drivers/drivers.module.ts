@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
-import { DriverRepositoryPort } from './domain/driver.repository';
-import { DriverService } from './application/driver.service';
+import { DriversPresentationModule } from './presentation/drivers.presentation.module';
 
 @Module({
-  providers: [{ provide: DriverRepositoryPort, useClass: DriverService }],
-  exports: [DriverRepositoryPort],
+  imports: [DriversPresentationModule],
+  exports: [DriversPresentationModule],
 })
 export class DriversModule {}

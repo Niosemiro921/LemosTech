@@ -7,3 +7,4 @@ export const uploadProfessionalPhoto = (file: File) => upload('/media/drivers/me
 export const uploadVehiclePhoto = (file: File) => upload('/media/drivers/me/vehicle-photo', file);
 export const uploadLicensePhoto = (file: File) => upload('/media/drivers/me/license-photo', file);
 export const uploadSupplierPhoto = (file: File) => upload('/media/suppliers/me/photo', file);
+export const uploadSubscriptionProof = (file: File) => upload('/media/suppliers/me/subscription-proof', file) as Promise<{ url: string; filename: string }>;

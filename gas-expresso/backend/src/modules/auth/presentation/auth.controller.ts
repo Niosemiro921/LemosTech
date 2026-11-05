@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthService } from '../application/auth.service';
 import { LoginDto } from '../application/dto/login.dto';
@@ -16,21 +17,25 @@ import { UpdateCustomerProfileDto } from '../application/dto/update-customer-pro
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register/customer')
   registerCustomer(@Body() dto: RegisterCustomerDto) {
     return this.auth.registerCustomer(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register/driver')
   registerDriver(@Body() dto: RegisterDriverDto) {
     return this.auth.registerDriver(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register/supplier')
   registerSupplier(@Body() dto: RegisterSupplierDto) {
     return this.auth.registerSupplier(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);

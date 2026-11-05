@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AccountStatus, DeliveryType, OrderStatus, ProductVariant, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import { BillingService } from '../../billing/application/billing.service';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { QuoteOrderDto } from '../dto/quote-order.dto';
 import { assertTransition } from '../domain/order-status';
@@ -36,7 +37,10 @@ type OrderQuote =
 
 @Injectable()
 export class OrderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly billing: BillingService,
+  ) {}
 
   async quote(dto: QuoteOrderDto) {
     const result = await this.calculateQuote(dto);
@@ -282,6 +286,7 @@ export class OrderService {
 
   private async supplierTransition(userId: string, id: string, to: OrderStatus, note: string) {
     const supplier = await this.getSupplier(userId);
+    await this.billing.assertSupplierOperational(supplier.id);
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findFirst({ where: { id, supplierId: supplier.id } });
       if (!order) throw new NotFoundException('Pedido não encontrado para este fornecedor.');

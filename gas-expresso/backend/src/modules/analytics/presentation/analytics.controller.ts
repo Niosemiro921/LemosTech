@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
 import { AnalyticsEventDto } from '../dto/analytics.dto';
 import { AnalyticsService } from '../application/analytics.service';
+import { ActiveAccountGuard } from '../../auth/guards/active-account.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/guards/roles.decorator';
@@ -13,7 +14,7 @@ export class AnalyticsController {
   @Post('events')
   async trackEvent(@Body() dto: AnalyticsEventDto) { return { tracked: true, event: await this.service.track(dto) }; }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
   @Roles(Role.ADMIN)
   @Get('summary')
   async summary(@Query('area') area?: string, @Query('sessionId') sessionId?: string) { return this.service.summarize(area, sessionId); }

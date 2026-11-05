@@ -195,11 +195,18 @@ export class AdminService {
     return this.driverFinance.decideTopUp(adminUserId, id, approve, reason);
   }
 
+  async getAdminWallet(adminUserId: string) {
+    await this.driverFinance.reconcileAdminWallet(adminUserId);
+    return this.driverFinance.getWallet(adminUserId);
+  }
+
   listWalletWithdrawals() { return this.driverFinance.listPendingWithdrawals(); }
+
+  requestAdminWithdrawal(adminUserId: string, amount: number, account: string, method?: string) { return this.driverFinance.requestAdminWithdrawal(adminUserId, amount, account, method); }
 
   approveWalletWithdrawal(adminUserId: string, id: string, reason?: string) { return this.driverFinance.decideWithdrawal(adminUserId, id, 'APPROVE', reason); }
   rejectWalletWithdrawal(adminUserId: string, id: string, reason: string) { return this.driverFinance.decideWithdrawal(adminUserId, id, 'REJECT', reason); }
-  payWalletWithdrawal(adminUserId: string, id: string, reason?: string) { return this.driverFinance.decideWithdrawal(adminUserId, id, 'PAY', reason); }
+  payWalletWithdrawal(adminUserId: string, id: string, paymentReference: string, paymentProofUrl?: string) { return this.driverFinance.decideWithdrawal(adminUserId, id, 'PAY', undefined, { paymentReference, paymentProofUrl }); }
 
   async sendEmail(adminUserId: string, dto: SendEmailDto) {
     let to = dto.to?.trim();

@@ -7,6 +7,7 @@ import { Roles } from '../../auth/guards/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AdminService } from '../application/admin.service';
 import { ReviewDecisionDto } from '../application/dto/review-decision.dto';
+import { SettleWithdrawalDto } from '../application/dto/settle-withdrawal.dto';
 import { WalletTopUpDecisionDto } from '../../operations/dto/operations.dto';
 
 @Controller('admin')
@@ -90,6 +91,14 @@ export class AdminController {
   }
 
 
+  @Post('wallet/withdrawals')
+  requestAdminWithdrawal(@Req() req: Request & { user: { sub: string } }, @Body() body: { amount: number; account: string; method?: string }) {
+    return this.admin.requestAdminWithdrawal(req.user.sub, body.amount, body.account, body.method);
+  }
+
+  @Get('wallet/me')
+  walletMe(@Req() req: Request & { user: { sub: string } }) { return this.admin.getAdminWallet(req.user.sub); }
+
   @Get('wallet/withdrawals')
   walletWithdrawals() { return this.admin.listWalletWithdrawals(); }
 
@@ -100,7 +109,7 @@ export class AdminController {
   rejectWalletWithdrawal(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request & { user: { sub: string } }, @Body() dto: ReviewDecisionDto) { return this.admin.rejectWalletWithdrawal(req.user.sub, id, dto.reason!); }
 
   @Post('wallet/withdrawals/:id/pay')
-  payWalletWithdrawal(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request & { user: { sub: string } }, @Body() dto?: ReviewDecisionDto) { return this.admin.payWalletWithdrawal(req.user.sub, id, dto?.reason); }
+  payWalletWithdrawal(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: Request & { user: { sub: string } }, @Body() dto: SettleWithdrawalDto) { return this.admin.payWalletWithdrawal(req.user.sub, id, dto.paymentReference, dto.paymentProofUrl); }
 
   @Post('email')
   sendEmail(@Body() dto: import('../application/dto/send-email.dto').SendEmailDto, @Req() req: Request & { user: { sub: string } }) { return this.admin.sendEmail(req.user.sub, dto); }

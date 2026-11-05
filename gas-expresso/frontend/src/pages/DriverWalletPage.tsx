@@ -35,7 +35,7 @@ export default function DriverWalletPage() {
   const topup = async (e: FormEvent) => {
     e.preventDefault();
     const value = Number(amount);
-    if (!Number.isSafeInteger(value) || value <= 0) { setError('Indique um valor inteiro válido em Kz. O limite é validado pela API.'); return; }
+    if (!Number.isSafeInteger(value) || value < 1000 || value > 1000000) { setError('Indique um valor inteiro válido entre 1.000 Kz e 1.000.000 Kz.'); return; }
     setBusy(true); setError(''); setResult('');
     try { const r = await requestWalletTopUp(value); setResult(`Solicitação ${r.reference ?? r.id} criada. O saldo só será creditado após confirmação administrativa.`); setAmount(''); await load(); }
     catch (e) { setError(extractMessage(e, 'Não foi possível solicitar a recarga.')); }
@@ -45,7 +45,7 @@ export default function DriverWalletPage() {
   const withdraw = async (e: FormEvent) => {
     e.preventDefault();
     const value = Number(withdrawAmount);
-    if (!Number.isSafeInteger(value) || value <= 0) { setError('Indique um valor inteiro válido em Kz.'); return; }
+    if (!Number.isSafeInteger(value) || value < 1000 || value > 1000000) { setError('Indique um valor inteiro válido entre 1.000 Kz e 1.000.000 Kz.'); return; }
     if (!withdrawMethod.trim() || !withdrawAccount.trim()) { setError('Preencha o método e a conta de recebimento.'); return; }
     setWithdrawBusy(true); setError(''); setResult('');
     try { const r = await requestDriverWithdrawal({ amount: value, method: withdrawMethod.trim(), account: withdrawAccount.trim() }); setResult(`Pedido ${r.reference ?? r.id} criado. Estado: ${statusLabel[r.status] ?? r.status}.`); setWithdrawAmount(''); setWithdrawMethod(''); setWithdrawAccount(''); await load(); }

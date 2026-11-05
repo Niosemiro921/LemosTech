@@ -147,12 +147,15 @@ export class DispatchService {
         }
 
         try {
+          await tx.$executeRaw`SAVEPOINT sp_offer`;
+          const safePickupKm = Number.isFinite(pickupDistanceKm) ? Number(pickupDistanceKm.toFixed(2)) : Number(driver.distanceKm.toFixed(2));
+          const safeMinutes = Number.isFinite(estimatedPickupMinutes) ? estimatedPickupMinutes : Math.max(3, Math.ceil(driver.distanceKm * 2.5));
           const offer = await tx.driverOffer.create({
             data: {
               orderId: order.id,
               driverId: driver.id,
-              distanceToPickupKm: Number(pickupDistanceKm.toFixed(2)),
-              estimatedPickupMinutes,
+              distanceToPickupKm: safePickupKm,
+              estimatedPickupMinutes: safeMinutes,
               expiresAt,
               status: PrismaDriverOfferStatus.PENDING,
             },
@@ -165,8 +168,15 @@ export class DispatchService {
             estimatedPickupMinutes: offer.estimatedPickupMinutes,
             expiresAt: offer.expiresAt,
           });
-        } catch (error) {
-          if ((error as { code?: string })?.code !== 'P2002') throw error;
+        } catch (error: any) {
+          try { await tx.$executeRaw`ROLLBACK TO SAVEPOINT sp_offer`; } catch {}
+          if (error?.code === 'P2002') {
+            // conflito de chave única (já existe oferta para este par); ignorar
+            continue;
+          }
+          // logar erro real sem abortar a transação (evita 25P02)
+          console.error('[Dispatch] Erro ao criar driverOffer para driver', driver.id, 'order', order.id, error?.message || error);
+          continue;
         }
       }
       return offers;

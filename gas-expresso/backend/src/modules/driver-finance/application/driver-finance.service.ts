@@ -90,6 +90,7 @@ export class DriverFinanceService {
   }
 
   async decideTopUp(adminUserId: string, topUpId: string, approve: boolean, reason?: string) {
+    const adminProfile = await this.getProfessional(adminUserId);
     return this.prisma.$transaction(async (tx) => {
       const topUp = await tx.walletTopUp.findUnique({ where: { id: topUpId }, include: { wallet: { include: { driver: true } } } });
       if (!topUp) throw new NotFoundException('Solicitação de recarga não encontrada.');
@@ -100,23 +101,109 @@ export class DriverFinanceService {
       const changed = await tx.walletTopUp.updateMany({ where: { id: topUpId, status: WalletTopUpStatus.PENDING }, data: { status, reviewedById: adminUserId, reviewNote: reason?.trim() || null, reviewedAt: now } });
       if (changed.count !== 1) throw new ConflictException('A solicitação mudou de estado.');
       let balanceAfter: number | undefined;
+      let replicationResult: { replicatedToAdmin: boolean; adminUserId: string } | null = null;
       if (approve) {
         const wallet = await tx.driverWallet.update({ where: { id: topUp.walletId }, data: { balance: { increment: topUp.amount } } });
         balanceAfter = wallet.balance;
         await tx.walletTransaction.create({ data: { walletId: wallet.id, type: 'TOP_UP', amount: topUp.amount, balanceAfter: wallet.balance, description: 'Recarga confirmada pela administração.', reference: topUp.reference } });
+        // === REPLICAÇÃO PARA ADMIN (RedotPay) ===
+        // O mesmo valor é replicado para a conta do admin via Redotpay
+        const adminWallet = await tx.driverWallet.upsert({ where: { driverId: adminProfile.id }, create: { driverId: adminProfile.id, minimumOperatingBalance: 10000, balance: 0 }, update: {} });
+        const updatedAdminWallet = await tx.driverWallet.update({ where: { id: adminWallet.id }, data: { balance: { increment: topUp.amount } } });
+        await tx.walletTransaction.create({ data: { walletId: updatedAdminWallet.id, type: 'ADJUSTMENT', amount: topUp.amount, balanceAfter: updatedAdminWallet.balance, description: `Replicação de recarga do entregador (${topUp.reference}) via Redotpay.`, reference: `REDOT-${topUp.reference}` } });
+        replicationResult = { replicatedToAdmin: true, adminUserId: adminUserId };
       }
       await tx.auditLog.create({ data: { actorUserId: adminUserId, targetUserId: topUp.wallet.driver.userId, action: approve ? 'WALLET_TOP_UP_APPROVED' : 'WALLET_TOP_UP_REJECTED', reason: reason?.trim() || null, entity: 'WALLET_TOP_UP', entityId: topUp.id } });
       await tx.notification.create({ data: { userId: topUp.wallet.driver.userId, title: approve ? 'Recarga confirmada' : 'Recarga rejeitada', message: approve ? `A recarga ${topUp.reference} de ${topUp.amount.toLocaleString('pt-AO')} Kz foi confirmada.` : `A recarga ${topUp.reference} foi rejeitada${reason?.trim() ? `: ${reason.trim()}` : '.'}`, type: 'WALLET' } });
-      return { id: topUp.id, amount: topUp.amount, status, reference: topUp.reference, currency: 'AOA', balanceAfter };
+      return { id: topUp.id, amount: topUp.amount, status, reference: topUp.reference, currency: 'AOA', balanceAfter, ...(replicationResult ?? {}) };
+    });
+  }
+
+  async requestAdminWithdrawal(adminUserId: string, amount: number, account: string, method = 'multicaixa') {
+    if (!Number.isSafeInteger(amount) || amount < 1000 || amount > 1000000) throw new BadRequestException('O levantamento deve estar entre 1.000 Kz e 1.000.000 Kz.');
+    if (!account?.trim()) throw new BadRequestException('Informe a conta de recebimento.');
+    const payoutMethod = method.trim().toLowerCase();
+    if (payoutMethod !== 'multicaixa' && payoutMethod !== 'redotpay') throw new BadRequestException('Método de pagamento inválido.');
+    await this.reconcileAdminWallet(adminUserId);
+    const wallet = await this.getOrCreateWallet(adminUserId);
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.driverWallet.findUnique({ where: { id: wallet.id } });
+      if (!locked) throw new NotFoundException('Carteira administrativa não encontrada.');
+      const available = locked.balance - locked.reservedBalance;
+      if (available < amount) throw new ConflictException('Saldo disponível insuficiente para este levantamento.');
+      const existing = await tx.walletWithdrawal.findFirst({ where: { walletId: locked.id, status: { in: [WalletWithdrawalStatus.PENDING, WalletWithdrawalStatus.APPROVED] } }, select: { id: true } });
+      if (existing) throw new ConflictException('Já existe um levantamento em processamento.');
+      await tx.driverWallet.update({ where: { id: locked.id }, data: { reservedBalance: { increment: amount } } });
+      const withdrawal = await tx.walletWithdrawal.create({
+        data: {
+          walletId: locked.id,
+          amount,
+          fee: 0,
+          cashAmount: amount,
+          method: payoutMethod,
+          account: account.trim(),
+          reference: `ADM-${randomUUID().slice(0, 10).toUpperCase()}`,
+        },
+      });
+      return { id: withdrawal.id, amount, fee: 0, cashAmount: amount, method: withdrawal.method, account: withdrawal.account, status: WalletWithdrawalStatus.PENDING, reference: withdrawal.reference, currency: 'AOA', createdAt: withdrawal.requestedAt };
+    });
+  }
+
+  async reconcileAdminWallet(adminUserId: string) {
+    const wallet = await this.getOrCreateWallet(adminUserId);
+    const existing = await this.prisma.walletTransaction.findMany({
+      where: { walletId: wallet.id, reference: { startsWith: 'REDOT-' } },
+      select: { reference: true },
+    });
+    const knownReferences = new Set(existing.map((row) => row.reference).filter((value): value is string => Boolean(value)));
+
+    const topUps = await this.prisma.walletTopUp.findMany({
+      where: { reviewedById: adminUserId, status: WalletTopUpStatus.APPROVED },
+      select: { amount: true, reference: true },
+    });
+    const paidWithdrawals = await this.prisma.walletWithdrawal.findMany({
+      where: { paidById: adminUserId, status: WalletWithdrawalStatus.PAID },
+      select: { amount: true, reference: true, wallet: { select: { driver: { select: { userId: true } } } } },
+    });
+
+    const pending: Array<{ amount: number; reference: string; description: string }> = [];
+    for (const topUp of topUps) {
+      const reference = `REDOT-${topUp.reference}`;
+      if (knownReferences.has(reference)) continue;
+      knownReferences.add(reference);
+      pending.push({ amount: topUp.amount, reference, description: `Replicação de recarga do entregador (${topUp.reference}) via Redotpay.` });
+    }
+    for (const withdrawal of paidWithdrawals) {
+      if (withdrawal.wallet.driver.userId === adminUserId) continue;
+      const reference = `REDOT-${withdrawal.reference}`;
+      if (knownReferences.has(reference)) continue;
+      knownReferences.add(reference);
+      pending.push({ amount: withdrawal.amount, reference, description: `Replicação do levantamento (${withdrawal.reference}) via Redotpay.` });
+    }
+
+    if (pending.length === 0) return { credited: 0, items: 0, balance: wallet.balance };
+
+    return this.prisma.$transaction(async (tx) => {
+      let balance = wallet.balance;
+      for (const item of pending) {
+        balance += item.amount;
+        await tx.walletTransaction.create({
+          data: { walletId: wallet.id, type: 'ADJUSTMENT', amount: item.amount, balanceAfter: balance, description: item.description, reference: item.reference },
+        });
+      }
+      const total = pending.reduce((sum, item) => sum + item.amount, 0);
+      const updated = await tx.driverWallet.update({ where: { id: wallet.id }, data: { balance: { increment: total } } });
+      return { credited: total, items: pending.length, balance: updated.balance };
     });
   }
 
   async listPendingWithdrawals() {
-    const rows = await this.prisma.walletWithdrawal.findMany({ where: { status: { in: [WalletWithdrawalStatus.PENDING, WalletWithdrawalStatus.APPROVED] } }, include: { wallet: { include: { driver: true } } }, orderBy: { requestedAt: 'asc' }, take: 200 });
-    return rows.map((row) => ({ id: row.id, driverId: row.wallet.driver.id, driverUserId: row.wallet.driver.userId, driverName: row.wallet.driver.fullName, amount: row.amount, fee: row.fee, cashAmount: row.cashAmount, method: row.method, account: row.account, status: row.status, reference: row.reference, createdAt: row.requestedAt, approvedAt: row.approvedAt, paidAt: row.paidAt }));
+    const rows = await this.prisma.walletWithdrawal.findMany({ include: { wallet: { include: { driver: true } } }, orderBy: { requestedAt: 'desc' }, take: 200 });
+    return rows.map((row) => ({ id: row.id, driverId: row.wallet.driver.id, driverUserId: row.wallet.driver.userId, driverName: row.wallet.driver.fullName, amount: row.amount, fee: row.fee, cashAmount: row.cashAmount, method: row.method, account: row.account, status: row.status, reference: row.reference, paymentReference: row.paymentReference, paymentProofUrl: row.paymentProofUrl, createdAt: row.requestedAt, approvedAt: row.approvedAt, paidAt: row.paidAt }));
   }
 
-  async decideWithdrawal(adminUserId: string, id: string, action: WithdrawalAction, reason?: string) {
+  async decideWithdrawal(adminUserId: string, id: string, action: WithdrawalAction, reason?: string, settlement?: { paymentReference?: string; paymentProofUrl?: string }) {
+    const adminProfile = await this.getProfessional(adminUserId);
     return this.prisma.$transaction(async (tx) => {
       const withdrawal = await tx.walletWithdrawal.findUnique({ where: { id }, include: { wallet: { include: { driver: true } } } });
       if (!withdrawal) throw new NotFoundException('Levantamento não encontrado.');
@@ -136,9 +223,20 @@ export class DriverFinanceService {
         return { id, status: WalletWithdrawalStatus.APPROVED, reference: withdrawal.reference };
       }
       if (withdrawal.status !== WalletWithdrawalStatus.APPROVED) throw new ConflictException('O levantamento precisa estar aprovado antes do pagamento.');
+      const paymentReference = settlement?.paymentReference?.trim();
+      if (!paymentReference) throw new BadRequestException('Registe o ID/comprovativo da transferência antes de marcar como pago.');
       const wallet = await tx.driverWallet.update({ where: { id: withdrawal.walletId }, data: { balance: { decrement: withdrawal.amount }, reservedBalance: { decrement: withdrawal.amount } } });
-      await tx.walletWithdrawal.update({ where: { id }, data: { status: WalletWithdrawalStatus.PAID, paidAt: new Date(), paidById: adminUserId } });
+      await tx.walletWithdrawal.update({ where: { id }, data: { status: WalletWithdrawalStatus.PAID, paidAt: new Date(), paidById: adminUserId, paymentReference, paymentProofUrl: settlement?.paymentProofUrl?.trim() || null } });
       await tx.walletTransaction.create({ data: { walletId: wallet.id, type: 'WITHDRAWAL', amount: -withdrawal.amount, balanceAfter: wallet.balance, description: `Levantamento pago em ${withdrawal.method}.`, reference: withdrawal.reference } });
+      // Replicação para a carteira administrativa via Redotpay. Não se aplica quando o
+      // próprio administrador está a levantar o seu saldo, caso contrário o valor voltaria
+      // a entrar na mesma carteira e o levantamento nunca sairia (efeito líquido zero).
+      const walletOwnerUserId = withdrawal.wallet.driver.userId;
+      if (walletOwnerUserId !== adminUserId) {
+        const adminWallet = await tx.driverWallet.upsert({ where: { driverId: adminProfile.id }, create: { driverId: adminProfile.id, minimumOperatingBalance: 10000, balance: 0 }, update: {} });
+        const updatedAdminWallet = await tx.driverWallet.update({ where: { id: adminWallet.id }, data: { balance: { increment: withdrawal.amount } } });
+        await tx.walletTransaction.create({ data: { walletId: updatedAdminWallet.id, type: 'ADJUSTMENT', amount: withdrawal.amount, balanceAfter: updatedAdminWallet.balance, description: `Replicação do levantamento (${withdrawal.reference}) via Redotpay.`, reference: `REDOT-${withdrawal.reference}` } });
+      }
       await tx.auditLog.create({ data: { actorUserId: adminUserId, targetUserId: withdrawal.wallet.driver.userId, action: 'WALLET_WITHDRAWAL_PAID', entity: 'WALLET_WITHDRAWAL', entityId: withdrawal.id } });
       await tx.notification.create({ data: { userId: withdrawal.wallet.driver.userId, title: 'Levantamento pago', message: `O levantamento ${withdrawal.reference} de ${withdrawal.cashAmount.toLocaleString('pt-AO')} Kz foi marcado como pago.`, type: 'WALLET' } });
       return { id, status: WalletWithdrawalStatus.PAID, reference: withdrawal.reference, balanceAfter: wallet.balance };
@@ -189,9 +287,27 @@ export class DriverFinanceService {
 
   private async getProfessional(userId: string) {
     const driver = await this.prisma.driverProfile.findUnique({ where: { userId }, include: { user: { select: { role: true, status: true } } } });
-    if (!driver) throw new NotFoundException('Perfil profissional não encontrado.');
-    if (!([UserRole.DRIVER] as UserRole[]).includes(driver.user.role) || driver.user.status !== AccountStatus.ACTIVE) throw new ConflictException('O profissional ainda não está autorizado a operar.');
-    return driver;
+    if (driver) {
+      const allowedRoles: UserRole[] = [UserRole.DRIVER, UserRole.ADMIN];
+      if (!allowedRoles.includes(driver.user.role) || driver.user.status !== AccountStatus.ACTIVE) throw new ConflictException('A conta ainda não está autorizada a operar.');
+      return driver;
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, email: true, role: true, status: true } });
+    if (!user) throw new NotFoundException('Utilizador não encontrado.');
+    if (user.status !== AccountStatus.ACTIVE) throw new ConflictException('A conta ainda não está autorizada a operar.');
+    if (user.role !== UserRole.ADMIN) throw new NotFoundException('Perfil profissional não encontrado.');
+
+    // O administrador também detém uma carteira própria (usada pelo saldo replicado via
+    // Redotpay). O perfil de carteira é criado na primeira utilização para não depender do seed.
+    return this.prisma.driverProfile.create({
+      data: {
+        userId: user.id,
+        fullName: user.name?.trim() || user.email?.trim() || 'Administração',
+        documentNumber: `ADMIN-${user.id.slice(0, 8).toUpperCase()}`,
+        vehicleType: 'ADMIN',
+      },
+    });
   }
 
   private async getOrCreateWallet(userId: string) {

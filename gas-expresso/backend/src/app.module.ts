@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { SecurityModule } from './infrastructure/security/security.module';
@@ -23,10 +25,14 @@ import { ChatModule } from './modules/chat/chat.module';
 import { MailModule } from './modules/mail/mail.module';
 import { MapsModule } from './modules/maps/maps.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { WalletsModule } from './modules/wallets/wallets.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { ImportsModule } from './modules/imports/imports.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     DatabaseModule,
     SecurityModule,
     CustomersModule,
@@ -49,6 +55,10 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     MailModule,
     MapsModule,
     AnalyticsModule,
+    WalletsModule,
+    BillingModule,
+    ImportsModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

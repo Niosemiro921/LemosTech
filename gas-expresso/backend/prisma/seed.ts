@@ -131,6 +131,24 @@ async function seedDemo() {
       });
     }
 
+    if (profile.role === UserRole.ADMIN) {
+      const adminProfile = await prisma.driverProfile.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: {
+          userId: user.id,
+          fullName: 'Administração Demo',
+          documentNumber: `ADMIN-${user.id.slice(0, 8).toUpperCase()}`,
+          vehicleType: 'ADMIN',
+        },
+      });
+      await prisma.driverWallet.upsert({
+        where: { driverId: adminProfile.id },
+        update: {},
+        create: { driverId: adminProfile.id, minimumOperatingBalance: 10000, balance: 0 },
+      });
+    }
+
     if (profile.role === UserRole.SUPPLIER) {
       await prisma.supplierProfile.upsert({
         where: { userId: user.id },

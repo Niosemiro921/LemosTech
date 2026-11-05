@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { Role } from '../../../shared/domain/auth.enums';
+import { ActiveAccountGuard } from '../../auth/guards/active-account.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/guards/roles.decorator';
@@ -11,7 +12,7 @@ import { AnswerCallDto, EndCallDto, IceCandidateDto, InitiateCallDto } from '../
 type ReqUser = Request & { user: { sub: string } };
 
 @Controller('chat/orders')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
 @Roles(Role.CUSTOMER, Role.DRIVER)
 export class ChatController {
   constructor(private readonly chat: ChatService) {}

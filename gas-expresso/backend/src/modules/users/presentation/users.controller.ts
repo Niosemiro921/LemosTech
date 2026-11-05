@@ -1,5 +1,6 @@
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
+import { ActiveAccountGuard } from '../../auth/guards/active-account.guard';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { Roles } from '../../auth/guards/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -13,7 +14,7 @@ export class UsersController {
     return req.user;
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ActiveAccountGuard)
   @Roles(Role.DRIVER)
   @Get('driver-area-smoke-test')
   driverArea() {

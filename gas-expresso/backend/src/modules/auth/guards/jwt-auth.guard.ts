@@ -46,21 +46,31 @@ export class JwtAuthGuard implements CanActivate {
       );
     }
 
+    let payload: JwtPayload;
     try {
-      const payload =
-        await this.jwtService.verifyAsync<JwtPayload>(token);
-      if (payload.jti) {
-        const revoked = await this.prisma.revokedToken.findUnique({ where: { jti: payload.jti } });
-        if (revoked && revoked.expiresAt > new Date()) throw new UnauthorizedException('Sessão terminada.');
-        if (revoked && revoked.expiresAt <= new Date()) await this.prisma.revokedToken.delete({ where: { jti: payload.jti } }).catch(() => undefined);
-      }
-
-      request.user = payload;
-      return true;
+      payload = await this.jwtService.verifyAsync<JwtPayload>(token);
     } catch {
-      throw new UnauthorizedException(
-        'Token inválido ou expirado.',
-      );
+      throw new UnauthorizedException('Token inválido ou expirado.');
     }
+
+    if (payload.jti) {
+      const revoked = await this.prisma.revokedToken.findUnique({ where: { jti: payload.jti } });
+      if (revoked && revoked.expiresAt > new Date()) throw new UnauthorizedException('Sessão terminada.');
+      if (revoked && revoked.expiresAt <= new Date()) {
+        await this.prisma.revokedToken.delete({ where: { jti: payload.jti } }).catch(() => undefined);
+      }
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { role: true, status: true },
+    });
+    if (!user) throw new UnauthorizedException('Sessão inválida.');
+    if (user.status === 'SUSPENDED' || user.status === 'REJECTED') {
+      throw new UnauthorizedException('Conta suspensa ou rejeitada.');
+    }
+
+    request.user = { ...payload, role: user.role, status: user.status };
+    return true;
   }
 }
